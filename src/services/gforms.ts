@@ -4,132 +4,137 @@
  */
 
 interface ServiceAccountCredentials {
-  type: string
-  project_id: string
-  private_key_id: string
-  private_key: string
-  client_email: string
-  client_id: string
+  type: string;
+  project_id: string;
+  private_key_id: string;
+  private_key: string;
+  client_email: string;
+  client_id: string;
 }
 
 interface TokenResponse {
-  access_token: string
-  expires_in: number
-  token_type: string
+  access_token: string;
+  expires_in: number;
+  token_type: string;
 }
 
 interface FormResponse {
-  responseId: string
-  createTime: string
-  lastSubmittedTime: string
-  respondentEmail?: string
-  answers?: Record<string, unknown>
+  responseId: string;
+  createTime: string;
+  lastSubmittedTime: string;
+  respondentEmail?: string;
+  answers?: Record<string, unknown>;
 }
 
 interface ListResponsesResult {
-  responses: FormResponse[]
-  nextPageToken?: string
+  responses: FormResponse[];
+  nextPageToken?: string;
 }
 
 export class GFormsService {
-  private accessToken: string | null = null
-  private tokenExpiresAt = 0
-  private readonly credentials: ServiceAccountCredentials
+  private accessToken: string | null = null;
+  private tokenExpiresAt = 0;
+  private readonly credentials: ServiceAccountCredentials;
 
   constructor(serviceAccountJson: string) {
-    this.credentials = JSON.parse(serviceAccountJson) as ServiceAccountCredentials
+    this.credentials = JSON.parse(
+      serviceAccountJson,
+    ) as ServiceAccountCredentials;
   }
 
-  // ── OAuth2 token management ──────────────────────────────────────────────
+  // OAuth2 token management
 
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiresAt) {
-      return this.accessToken
+      return this.accessToken;
     }
 
-    const token = await this.fetchServiceAccountToken()
-    this.accessToken = token.access_token
-    this.tokenExpiresAt = Date.now() + (token.expires_in - 60) * 1000 // 1min buffer
-    return this.accessToken
+    const token = await this.fetchServiceAccountToken();
+    this.accessToken = token.access_token;
+    this.tokenExpiresAt = Date.now() + (token.expires_in - 60) * 1000; // 1min buffer
+    return this.accessToken;
   }
 
   private async fetchServiceAccountToken(): Promise<TokenResponse> {
-    const now = Math.floor(Date.now() / 1000)
+    const now = Math.floor(Date.now() / 1000);
     const claims = {
       iss: this.credentials.client_email,
-      scope: 'https://www.googleapis.com/auth/forms.responses.readonly',
-      aud: 'https://oauth2.googleapis.com/token',
+      scope: "https://www.googleapis.com/auth/forms.responses.readonly",
+      aud: "https://oauth2.googleapis.com/token",
       iat: now,
       exp: now + 3600,
-    }
+    };
 
-    const jwt = await this.createJwt(claims)
+    const jwt = await this.createJwt(claims);
 
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
         assertion: jwt,
       }),
-    })
+    });
 
     if (!response.ok) {
-      const err = await response.text()
-      throw new Error(`Failed to get service account token: ${err}`)
+      const err = await response.text();
+      throw new Error(`Failed to get service account token: ${err}`);
     }
 
-    return response.json() as Promise<TokenResponse>
+    return response.json() as Promise<TokenResponse>;
   }
 
   private async createJwt(claims: Record<string, unknown>): Promise<string> {
-    const header = { alg: 'RS256', typ: 'JWT' }
+    const header = { alg: "RS256", typ: "JWT" };
 
     const encode = (obj: unknown) =>
-      btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+      btoa(JSON.stringify(obj))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=/g, "");
 
-    const headerB64 = encode(header)
-    const payloadB64 = encode(claims)
-    const signingInput = `${headerB64}.${payloadB64}`
+    const headerB64 = encode(header);
+    const payloadB64 = encode(claims);
+    const signingInput = `${headerB64}.${payloadB64}`;
 
     // Import private key from PEM
     const pemBody = this.credentials.private_key
-      .replace(/-----BEGIN PRIVATE KEY-----/, '')
-      .replace(/-----END PRIVATE KEY-----/, '')
-      .replace(/\s/g, '')
+      .replace(/-----BEGIN PRIVATE KEY-----/, "")
+      .replace(/-----END PRIVATE KEY-----/, "")
+      .replace(/\s/g, "");
 
-    const keyBytes = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0))
+    const keyBytes = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
 
     const privateKey = await crypto.subtle.importKey(
-      'pkcs8',
+      "pkcs8",
       keyBytes,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
-      ['sign'],
-    )
+      ["sign"],
+    );
 
     const signature = await crypto.subtle.sign(
-      'RSASSA-PKCS1-v1_5',
+      "RSASSA-PKCS1-v1_5",
       privateKey,
       new TextEncoder().encode(signingInput),
-    )
+    );
 
     const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '')
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
 
-    return `${signingInput}.${sigB64}`
+    return `${signingInput}.${sigB64}`;
   }
 
-  // ── Forms API ────────────────────────────────────────────────────────────
+  // Forms API
 
   /**
    * Get the total response count for a form.
    * Used by reconciliation cron — not called at runtime per-user.
    */
   async getResponseCount(formId: string): Promise<number> {
-    return this.getExactResponseCount(formId)
+    return this.getExactResponseCount(formId);
   }
 
   /**
@@ -137,27 +142,29 @@ export class GFormsService {
    * Used by reminder email cron — 1 call per event per reminder cycle.
    */
   async getAllResponses(formId: string): Promise<FormResponse[]> {
-    const token = await this.getAccessToken()
-    const allResponses: FormResponse[] = []
-    let pageToken: string | undefined
+    const token = await this.getAccessToken();
+    const allResponses: FormResponse[] = [];
+    let pageToken: string | undefined;
 
     do {
-      const url = new URL(`https://forms.googleapis.com/v1/forms/${formId}/responses`)
-      url.searchParams.set('pageSize', '500')
-      if (pageToken) url.searchParams.set('pageToken', pageToken)
+      const url = new URL(
+        `https://forms.googleapis.com/v1/forms/${formId}/responses`,
+      );
+      url.searchParams.set("pageSize", "500");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
 
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${token}` },
-      })
+      });
 
-      if (!response.ok) throw new Error(`Forms API error: ${response.status}`)
+      if (!response.ok) throw new Error(`Forms API error: ${response.status}`);
 
-      const data = (await response.json()) as ListResponsesResult
-      allResponses.push(...(data.responses ?? []))
-      pageToken = data.nextPageToken
-    } while (pageToken)
+      const data = (await response.json()) as ListResponsesResult;
+      allResponses.push(...(data.responses ?? []));
+      pageToken = data.nextPageToken;
+    } while (pageToken);
 
-    return allResponses
+    return allResponses;
   }
 
   /**
@@ -165,10 +172,10 @@ export class GFormsService {
    * Google Forms automatically collects emails when "Collect email addresses" is enabled.
    */
   async getRespondentEmails(formId: string): Promise<string[]> {
-    const responses = await this.getAllResponses(formId)
+    const responses = await this.getAllResponses(formId);
     return responses
       .map((r) => r.respondentEmail)
-      .filter((email): email is string => Boolean(email))
+      .filter((email): email is string => Boolean(email));
   }
 
   /**
@@ -176,11 +183,11 @@ export class GFormsService {
    * Used for precise reconciliation.
    */
   async getExactResponseCount(formId: string): Promise<number> {
-    const responses = await this.getAllResponses(formId)
-    return responses.length
+    const responses = await this.getAllResponses(formId);
+    return responses.length;
   }
 
-  // ── Watch management ────────────────────────────────────────────────────
+  // Watch management
 
   /**
    * Create a Watch on a Google Form.
@@ -194,15 +201,15 @@ export class GFormsService {
     formId: string,
     webhookUrl: string,
   ): Promise<{ watchId: string; expireTime: string }> {
-    const token = await this.getAccessToken()
+    const token = await this.getAccessToken();
 
     const response = await fetch(
       `https://forms.googleapis.com/v1/forms/${formId}/watches`,
       {
-        method: 'POST',
+        method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           watch: {
@@ -211,42 +218,48 @@ export class GFormsService {
               // The URL must be HTTPS and publicly reachable.
               httpTarget: { uri: webhookUrl },
             },
-            eventType: 'RESPONSES',
+            eventType: "RESPONSES",
           },
         }),
       },
-    )
+    );
 
     if (!response.ok) {
-      const err = await response.text()
-      throw new Error(`Failed to create Watch: ${err}`)
+      const err = await response.text();
+      throw new Error(`Failed to create Watch: ${err}`);
     }
 
-    const data = (await response.json()) as { id: string; expireTime: string }
-    return { watchId: data.id, expireTime: data.expireTime }
+    const data = (await response.json()) as { id: string; expireTime: string };
+    return { watchId: data.id, expireTime: data.expireTime };
   }
 
   /**
    * Renew an existing Watch (reset its 7-day TTL).
    */
-  async renewWatch(formId: string, watchId: string): Promise<{ expireTime: string }> {
-    const token = await this.getAccessToken()
+  async renewWatch(
+    formId: string,
+    watchId: string,
+  ): Promise<{ expireTime: string }> {
+    const token = await this.getAccessToken();
 
     const response = await fetch(
       `https://forms.googleapis.com/v1/forms/${formId}/watches/${watchId}:renew`,
       {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({}),
       },
-    )
+    );
 
     if (!response.ok) {
-      const err = await response.text()
-      throw new Error(`Failed to renew Watch ${watchId}: ${err}`)
+      const err = await response.text();
+      throw new Error(`Failed to renew Watch ${watchId}: ${err}`);
     }
 
-    const data = (await response.json()) as { expireTime: string }
-    return { expireTime: data.expireTime }
+    const data = (await response.json()) as { expireTime: string };
+    return { expireTime: data.expireTime };
   }
 }

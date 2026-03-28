@@ -1,33 +1,38 @@
-import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { sql, relations } from 'drizzle-orm'
-import { users } from './users'
-import { events } from './events'
+import {
+  sqliteTable,
+  text,
+  integer,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
+import { sql, relations } from "drizzle-orm";
+import { users } from "./users";
+import { events } from "./events";
 
 export const bookmarks = sqliteTable(
-  'bookmarks',
+  "bookmarks",
   {
-    id: text('id')
+    id: text("id")
       .primaryKey()
-      .$defaultFn(() => crypto.randomUUID().replace(/-/g, '')),
-    userId: text('user_id')
+      .$defaultFn(() => crypto.randomUUID().replace(/-/g, "")),
+    userId: text("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    eventId: text('event_id')
+      .references(() => users.id, { onDelete: "cascade" }),
+    eventId: text("event_id")
       .notNull()
-      .references(() => events.id, { onDelete: 'cascade' }),
-    createdAt: integer('created_at')
+      .references(() => events.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at")
       .notNull()
       .default(sql`(unixepoch())`),
   },
   (table) => ({
-    userEventIdx: uniqueIndex('idx_bookmarks_user_event').on(
+    userEventIdx: uniqueIndex("idx_bookmarks_user_event").on(
       table.userId,
       table.eventId,
     ),
   }),
-)
+);
 
-// ── Relational definitions ────────────────────────────────────────────────────
+// Relational definitions
 // Required for Drizzle's `db.query.bookmarks.findMany({ with: { event } })`
 // relational API to resolve the join correctly.
 export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
@@ -39,7 +44,7 @@ export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
     fields: [bookmarks.userId],
     references: [users.id],
   }),
-}))
+}));
 
-export type Bookmark = typeof bookmarks.$inferSelect
-export type NewBookmark = typeof bookmarks.$inferInsert
+export type Bookmark = typeof bookmarks.$inferSelect;
+export type NewBookmark = typeof bookmarks.$inferInsert;

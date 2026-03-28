@@ -1,19 +1,19 @@
-import { Hono } from 'hono'
-import type { LeapifyEnv, SiteConfigKey, SiteConfigMap } from '../types'
-import { createDb } from '../db'
-import { siteConfig } from '../db/schema/site-config'
-import { authMiddleware, adminMiddleware } from '../auth/middleware'
+import { Hono } from "hono";
+import type { LeapifyEnv, SiteConfigKey, SiteConfigMap } from "../types";
+import { createDb } from "../db";
+import { siteConfig } from "../db/schema/site-config";
+import { authMiddleware, adminMiddleware } from "../auth/middleware";
 
-export const siteConfigRoute = new Hono<LeapifyEnv>()
+export const siteConfigRoute = new Hono<LeapifyEnv>();
 
-// ── GET /config — public ──────────────────────────────────────────────────────
-siteConfigRoute.get('/', async (c) => {
-  const db = createDb(c.env.DB)
+// GET /config — public
+siteConfigRoute.get("/", async (c) => {
+  const db = createDb(c.env.DB);
 
-  const rows = await db.query.siteConfig.findMany()
+  const rows = await db.query.siteConfig.findMany();
   const config = Object.fromEntries(
     rows.map((r) => [r.key, JSON.parse(r.value)]),
-  ) as Partial<SiteConfigMap>
+  ) as Partial<SiteConfigMap>;
 
   return c.json({
     data: {
@@ -24,16 +24,16 @@ siteConfigRoute.get('/', async (c) => {
       maintenanceMode: config.maintenance_mode ?? false,
       now: Math.floor(Date.now() / 1000),
     },
-  })
-})
+  });
+});
 
-// ── PATCH /config/:key — admin only ──────────────────────────────────────────
-siteConfigRoute.patch('/:key', authMiddleware, adminMiddleware, async (c) => {
-  const key = c.req.param('key') as SiteConfigKey
-  const { value } = await c.req.json<{ value: SiteConfigMap[typeof key] }>()
+// PATCH /config/:key — admin only
+siteConfigRoute.patch("/:key", authMiddleware, adminMiddleware, async (c) => {
+  const key = c.req.param("key") as SiteConfigKey;
+  const { value } = await c.req.json<{ value: SiteConfigMap[typeof key] }>();
 
-  const db = createDb(c.env.DB)
-  const now = Math.floor(Date.now() / 1000)
+  const db = createDb(c.env.DB);
+  const now = Math.floor(Date.now() / 1000);
 
   await db
     .insert(siteConfig)
@@ -41,12 +41,14 @@ siteConfigRoute.patch('/:key', authMiddleware, adminMiddleware, async (c) => {
     .onConflictDoUpdate({
       target: siteConfig.key,
       set: { value: JSON.stringify(value), updatedAt: now },
-    })
+    });
 
   // Write-through to KV so the maintenance-mode middleware can read it
   // without a D1 round-trip on every request. TTL 10 min — admin must
   // wait at most 10 min for changes to fully propagate across all edges.
-  await c.env.KV.put(`config:${key}`, JSON.stringify(value), { expirationTtl: 600 })
+  await c.env.KV.put(`config:${key}`, JSON.stringify(value), {
+    expirationTtl: 600,
+  });
 
-  return c.json({ data: { key, value } })
-})
+  return c.json({ data: { key, value } });
+});

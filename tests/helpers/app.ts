@@ -1,6 +1,6 @@
-import { createApp } from '../../src/app'
+import { createApp } from "../../src/app";
 
-// ─── Mock KV ─────────────────────────────────────────────────────────────────
+// Mock KV
 //
 // Root-cause fix: Cloudflare KV's `get(key, 'json')` automatically JSON-parses
 // the stored string before returning.  Our earlier stub always returned the raw
@@ -11,67 +11,71 @@ import { createApp } from '../../src/app'
 // caller requests the 'json' type, mirroring the real KV behaviour.
 //
 export function createMockKV() {
-  const store = new Map<string, string>()
+  const store = new Map<string, string>();
 
   return {
     _store: store, // exposed so tests can inspect / pre-seed directly
 
     async get(key: string, type?: string): Promise<any> {
-      const raw = store.get(key) ?? null
-      if (raw === null) return null
+      const raw = store.get(key) ?? null;
+      if (raw === null) return null;
       // Mirror real KV: parse JSON when 'json' type is requested
-      if (type === 'json') {
-        try { return JSON.parse(raw) } catch { return null }
+      if (type === "json") {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
       }
-      return raw
+      return raw;
     },
 
     async put(key: string, value: string, _options?: object): Promise<void> {
-      store.set(key, value)
+      store.set(key, value);
     },
 
     async delete(key: string): Promise<void> {
-      store.delete(key)
+      store.delete(key);
     },
 
     async list() {
-      return { keys: [], list_complete: true, cursor: '' }
+      return { keys: [], list_complete: true, cursor: "" };
     },
 
     async getWithMetadata(key: string, type?: string) {
-      const value = await this.get(key, type)
-      return { value, metadata: null }
+      const value = await this.get(key, type);
+      return { value, metadata: null };
     },
-  }
+  };
 }
 
-// ─── Mock Queue ───────────────────────────────────────────────────────────────
+// Mock Queue
 export function createMockQueue() {
   return {
     send: async () => {},
     sendBatch: async () => {},
-  }
+  };
 }
 
-// ─── Test App Factory ─────────────────────────────────────────────────────────
+// Test App Factory
 //
 // Returns both the Hono app instance AND the env bindings so individual tests
 // can pre-seed the KV namespace before firing requests.
 //
 export function createTestApp() {
-  const kv = createMockKV()
+  const kv = createMockKV();
 
   const env = {
-    DB: {} as any,  // injected via vi.mock('../../src/db') per test file
+    DB: {} as any, // injected via vi.mock('../../src/db') per test file
     KV: kv as any,
     QUEUE: createMockQueue() as any,
-    RESEND_API_KEY: 'test-resend-key',
-    FIREBASE_PROJECT_ID: 'test-project',
-    GFORMS_SERVICE_ACCOUNT_JSON: '{}',
-    INTERNAL_API_SECRET: 'secret',
-  }
+    RESEND_API_KEY: "test-resend-key",
+    FIREBASE_PROJECT_ID: "test-project",
+    GFORMS_SERVICE_ACCOUNT_JSON: "{}",
+    INTERNAL_API_SECRET: "secret",
+  };
 
-  const app = createApp({ allowedOrigins: ['*'] })
+  const app = createApp({ allowedOrigins: ["*"] });
 
-  return { app, env, kv }
+  return { app, env, kv };
 }
