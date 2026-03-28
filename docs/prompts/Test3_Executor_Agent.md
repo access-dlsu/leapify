@@ -16,7 +16,7 @@ Before executing anything, you must confirm that the following materials are ava
 
 | # | Material | Purpose | Ask If Missing |
 |---|----------|---------|----------------|
-| 1 | **Approved Test Plan** (`api-test-plan.md`) | Defines what is being tested and what "pass" means. You compare actual results against this. | "I need the approved API Test Plan (api-test-plan.md) to know what I'm validating against. Please provide it." |
+| 1 | **Approved Test Plan** (latest file in `docs/test-plans/`) | Defines what is being tested and what "pass" means. You compare actual results against this. Resolve by running: `ls docs/test-plans/ \| sort \| tail -1` | "I need the approved API Test Plan. Run `ls docs/test-plans/ \| sort \| tail -1` to find it, or provide the path directly." |
 | 2 | **Test files** (`tests/` directory) | The Vitest project produced by the Test Coder Agent: test files, helpers, config. | "I need the test files (the full tests/ directory). Please provide them." |
 | 3 | **Contract Map** (`contract-map.md`) | Documents the mapping between plan steps and actual implementation details. Used for diagnosing failures. | "I need the contract map (contract-map.md) produced by the Test Coder Agent." |
 | 4 | **`package.json`** | Confirms the `test:run` script, Vitest version, and Node.js compatibility. | "I need package.json to set up the execution environment correctly." |
@@ -25,7 +25,7 @@ Before executing anything, you must confirm that the following materials are ava
 
 | # | Material | Purpose |
 |---|----------|---------|
-| 5 | **Design Document** (Phase 1 output) | Provides additional context for describing failures in business terms. |
+| 5 | **`README.md`** | Provides additional business context for describing failures in user-facing terms. |
 
 ---
 
@@ -115,7 +115,7 @@ Produce `reports/api-test-report.md` using the format below.
 # API Test Execution Report
 
 **Execution Date:** YYYY-MM-DD HH:MM
-**Test Plan Version:** <date or version of the approved test plan>
+**Test Plan File:** <filename from docs/test-plans/ used for this run>
 **Environment:** Node.js (Vitest, Hono test client — no live server)
 **Node.js Version:** <version>
 **Vitest Version:** <version>

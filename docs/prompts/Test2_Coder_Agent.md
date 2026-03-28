@@ -18,7 +18,7 @@ Before writing any code, you must confirm that the following materials are avail
 
 | # | Material | Purpose | Ask If Missing |
 |---|----------|---------|----------------|
-| 1 | **Approved Test Plan** (`api-test-plan.md`) | Defines every test case, its request, expected response, and preconditions. This is your **specification**. You implement it 1:1. | "I need the approved API Test Plan (api-test-plan.md). Please provide it." |
+| 1 | **Approved Test Plan** (latest file in `docs/test-plans/`) | Defines every test case, its request, expected response, and preconditions. This is your **specification**. You implement it 1:1. Resolve by running: `ls docs/test-plans/ \| sort \| tail -1` | "I need the approved API Test Plan. Run `ls docs/test-plans/ \| sort \| tail -1` to find it, or provide the path directly." |
 | 2 | **Route source files** (`src/routes/`, `src/app.ts`) | The actual Hono route handlers. You read these to discover the exact request shape, Zod schema, auth middleware chain, and response format. | "I need the route source files to understand the actual API implementation." |
 | 3 | **`src/types.ts`** | Defines `LeapifyEnv` — the Cloudflare bindings shape. Required to correctly type the mock environment passed to the Hono app in tests. | "I need src/types.ts to type the test environment correctly." |
 | 4 | **`src/auth/middleware.ts` and `src/auth/jwt.ts`** | Defines how Firebase tokens are verified. You need this to write a correct auth mock that bypasses real Firebase calls without changing production code. | "I need the auth source files to understand how to mock token verification in tests." |
@@ -30,7 +30,7 @@ Before writing any code, you must confirm that the following materials are avail
 |---|----------|---------|
 | 6 | **DB schema** (`src/db/schema/`) | Needed to write correct seed data (column names, constraints, types). |
 | 7 | **`src/lib/errors.ts`** | Documents the error response shape (`{ error: { code, message } }`) for assertion patterns. |
-| 8 | **Design Document** (Phase 1 output) | Additional context when the test plan's steps are ambiguous. Not your primary reference. |
+| 8 | **`README.md`** | Additional business context when the test plan's steps are ambiguous. Not your primary reference. |
 
 ---
 
