@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { sql } from 'drizzle-orm'
+import { sql, relations } from 'drizzle-orm'
 import { users } from './users'
 import { events } from './events'
 
@@ -26,6 +26,20 @@ export const bookmarks = sqliteTable(
     ),
   }),
 )
+
+// ── Relational definitions ────────────────────────────────────────────────────
+// Required for Drizzle's `db.query.bookmarks.findMany({ with: { event } })`
+// relational API to resolve the join correctly.
+export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
+  event: one(events, {
+    fields: [bookmarks.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [bookmarks.userId],
+    references: [users.id],
+  }),
+}))
 
 export type Bookmark = typeof bookmarks.$inferSelect
 export type NewBookmark = typeof bookmarks.$inferInsert

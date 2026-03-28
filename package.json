@@ -28,7 +28,9 @@
     "hono": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "@cloudflare/workers-types": { "optional": true }
+    "@cloudflare/workers-types": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.0",
@@ -37,6 +39,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241230.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.8.0",
     "drizzle-kit": "^0.29.0",
     "hono": "^4.7.0",
     "tsup": "^8.4.0",

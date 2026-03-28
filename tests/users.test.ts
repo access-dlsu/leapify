@@ -1,0 +1,128 @@
+import { test, expect, describe, beforeEach } from 'vitest'
+import { createTestApp } from './helpers/app'
+import { resetTestDb, getTestDb } from './helpers/setup'
+import { makeTestToken, seedUserInKV } from './helpers/auth'
+import { seedEvent, seedUser } from './helpers/seed'
+
+describe('Users & Bookmarks API', () => {
+  let app: ReturnType<typeof createTestApp>['app']
+  let env: ReturnType<typeof createTestApp>['env']
+  let kv: ReturnType<typeof createTestApp>['kv']
+  let userToken: string
+  let eventId: string
+
+  beforeEach(async () => {
+    resetTestDb()
+    ;({ app, env, kv } = createTestApp())
+    const db = getTestDb()
+
+    const studentUser = await seedUser(db, {
+      firebaseUid: 'student-uid-1',
+      email: 'student@dlsu.edu.ph',
+      role: 'student',
+    })
+    await seedUserInKV(kv, 'student-uid-1', 'student', studentUser.id)
+    userToken = makeTestToken('student-uid-1')
+
+    const event = await seedEvent(db, { slug: 'e1', status: 'published' })
+    eventId = event.id
+  })
+
+  test('API-USERS-001: Authenticated user gets their own profile', async () => {
+    const res = await app.request('/users/me', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.data.email).toBe('student@dlsu.edu.ph')
+  })
+
+  test('API-USERS-002: Guest gets null profile (not 401)', async () => {
+    const res = await app.request('/users/me', { method: 'GET' }, env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.data).toBeNull()
+  })
+
+  test('API-BOOKMARKS-001: Guest gets empty bookmark list (not 401)', async () => {
+    const res = await app.request('/users/me/bookmarks', { method: 'GET' }, env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.data).toEqual([])
+  })
+
+  test('API-BOOKMARKS-002: Authenticated user bookmark list is initially empty', async () => {
+    const res = await app.request('/users/me/bookmarks', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.data).toHaveLength(0)
+  })
+
+  test('API-BOOKMARKS-003: Toggle bookmark ON returns 201', async () => {
+    const res = await app.request(`/users/me/bookmarks/${eventId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    expect(res.status).toBe(201)
+    const body = await res.json() as any
+    expect(body.data.bookmarked).toBe(true)
+  })
+
+  test('API-BOOKMARKS-004: Toggle bookmark OFF (already bookmarked) returns 200', async () => {
+    await app.request(`/users/me/bookmarks/${eventId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+
+    const res = await app.request(`/users/me/bookmarks/${eventId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.data.bookmarked).toBe(false)
+  })
+
+  test('API-BOOKMARKS-005: Bookmark list contains bookmarked event', async () => {
+    await app.request(`/users/me/bookmarks/${eventId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+
+    const res = await app.request('/users/me/bookmarks', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].event.slug).toBe('e1')
+  })
+
+  test('API-BOOKMARKS-006: Explicit DELETE bookmark returns bookmarked:false', async () => {
+    await app.request(`/users/me/bookmarks/${eventId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+
+    const res = await app.request(`/users/me/bookmarks/${eventId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.data.bookmarked).toBe(false)
+  })
+
+  test('API-BOOKMARKS-007: Bookmark non-existent event returns 404', async () => {
+    const res = await app.request('/users/me/bookmarks/nonexistent-id', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    expect(res.status).toBe(404)
+  })
+})

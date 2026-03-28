@@ -114,6 +114,21 @@ export const authMiddleware = createMiddleware<{ Bindings: LeapifyBindings }>(
   },
 )
 
+// ─── Optional Auth middleware ─────────────────────────────────────────────────
+
+export const optionalAuthMiddleware = createMiddleware<{ Bindings: LeapifyBindings }>(
+  async (c, next) => {
+    const authHeader = c.req.header('Authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      // Safe casting for bypass
+      c.set('user', null as unknown as LeapifyUser)
+      return next()
+    }
+    // If header is present, enforce strict verification
+    return authMiddleware(c, next)
+  },
+)
+
 // ─── Admin guard (use after authMiddleware) ───────────────────────────────────
 
 export const adminMiddleware = createMiddleware<{ Bindings: LeapifyBindings }>(

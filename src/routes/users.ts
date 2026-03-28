@@ -5,45 +5,33 @@ import { createDb } from '../db'
 import { users } from '../db/schema/users'
 import { bookmarks } from '../db/schema/bookmarks'
 import { events } from '../db/schema/events'
-import { authMiddleware } from '../auth/middleware'
+import { authMiddleware, optionalAuthMiddleware } from '../auth/middleware'
 import { notFound } from '../lib/errors'
 
 export const usersRoute = new Hono<LeapifyEnv>()
 
 // ── GET /users/me ─────────────────────────────────────────────────────────────
-usersRoute.get('/me', authMiddleware, async (c) => {
+usersRoute.get('/me', optionalAuthMiddleware, async (c) => {
   const user = c.get('user')
-  const db = createDb(c.env.DB)
+  if (!user) return c.json({ data: null })
 
+  const db = createDb(c.env.DB)
   const profile = await db.query.users.findFirst({
     where: eq(users.id, user.dbId),
   })
 
-  if (!profile) throw notFound('User')
+  if (!profile) return c.json({ data: null })
 
   return c.json({ data: profile })
 })
 
-// ── PATCH /users/me ───────────────────────────────────────────────────────────
-usersRoute.patch('/me', authMiddleware, async (c) => {
-  const user = c.get('user')
-  const body = await c.req.json<{ name?: string }>()
-  const db = createDb(c.env.DB)
-
-  const [updated] = await db
-    .update(users)
-    .set({ ...(body.name ? { name: body.name } : {}) })
-    .where(eq(users.id, user.dbId))
-    .returning()
-
-  return c.json({ data: updated })
-})
 
 // ── GET /users/me/bookmarks ───────────────────────────────────────────────────
-usersRoute.get('/me/bookmarks', authMiddleware, async (c) => {
+usersRoute.get('/me/bookmarks', optionalAuthMiddleware, async (c) => {
   const user = c.get('user')
-  const db = createDb(c.env.DB)
+  if (!user) return c.json({ data: [] })
 
+  const db = createDb(c.env.DB)
   const rows = await db.query.bookmarks.findMany({
     where: eq(bookmarks.userId, user.dbId),
     with: { event: true },
