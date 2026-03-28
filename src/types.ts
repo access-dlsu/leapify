@@ -31,6 +31,7 @@ export interface LeapifyEnv {
   Bindings: LeapifyBindings
   Variables: {
     user: import('./auth/types').LeapifyUser
+    gformsWebhookUrl: string | undefined
   }
 }
 

@@ -3,6 +3,7 @@ import { logger } from 'hono/logger'
 import type { LeapifyEnv } from './types'
 import { errorHandler } from './lib/middleware/error-handler'
 import { createCorsMiddleware } from './lib/middleware/cors'
+import { serviceUnavailable } from './lib/errors'
 import { healthRoute } from './routes/health'
 import { eventsRoute } from './routes/events'
 import { usersRoute } from './routes/users'
@@ -12,23 +13,43 @@ import { gformsWebhookRoute } from './routes/internal/gforms-webhook'
 
 export interface LeapifyAppOptions {
   allowedOrigins?: string[]
+  /**
+   * Public HTTPS URL of your Cloudflare Worker.
+   * Required for Google Forms Watch push notifications to work.
+   * Google will POST to `{gformsWebhookUrl}/internal/gforms-webhook` on each new submission.
+   *
+   * @example 'https://leap.yourdomain.com'
+   */
+  gformsWebhookUrl?: string
 }
 
 export function createApp(options: LeapifyAppOptions = {}): Hono<LeapifyEnv> {
   const app = new Hono<LeapifyEnv>()
 
+  // Expose gformsWebhookUrl to routes via app-level middleware
+  if (options.gformsWebhookUrl) {
+    const webhookUrl = `${options.gformsWebhookUrl.replace(/\/$/, '')}/internal/gforms-webhook`
+    app.use('*', async (c, next) => {
+      c.set('gformsWebhookUrl', webhookUrl)
+      return next()
+    })
+  }
   // ── Global middleware ───────────────────────────────────────────────────────
   app.use('*', logger())
   app.use('*', createCorsMiddleware(options.allowedOrigins ?? ['*']))
 
   // ── Maintenance mode check ──────────────────────────────────────────────────
   app.use('*', async (c, next) => {
-    // Skip for health and internal routes
+    // Skip for health and internal routes so operators can still access them
     if (c.req.path === '/health' || c.req.path.startsWith('/internal')) {
       return next()
     }
-    // Lazy maintenance check (only if KV is available)
-    // Full implementation reads site_config; stub here for modularity
+    // Read maintenance_mode flag from KV (set via PATCH /config/maintenance_mode).
+    // KV is faster than D1 for this hot-path check — O(1) per request.
+    const flag = await c.env.KV.get<boolean>('config:maintenance_mode', 'json')
+    if (flag === true) {
+      throw serviceUnavailable('The site is currently under maintenance. Please check back soon.')
+    }
     return next()
   })
 

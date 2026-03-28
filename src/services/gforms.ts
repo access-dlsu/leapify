@@ -129,18 +129,7 @@ export class GFormsService {
    * Used by reconciliation cron — not called at runtime per-user.
    */
   async getResponseCount(formId: string): Promise<number> {
-    const token = await this.getAccessToken()
-    const response = await fetch(
-      `https://forms.googleapis.com/v1/forms/${formId}/responses?pageSize=1`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    )
-
-    if (!response.ok) throw new Error(`Forms API error: ${response.status}`)
-
-    // The API doesn't give a total count directly; we use list with minimal data
-    // and rely on the full list for reminder emails
-    const data = (await response.json()) as { responses?: unknown[] }
-    return data.responses?.length ?? 0
+    return this.getExactResponseCount(formId)
   }
 
   /**
@@ -196,8 +185,15 @@ export class GFormsService {
   /**
    * Create a Watch on a Google Form.
    * Fires a push notification to webhookUrl on every new response.
+   *
+   * @param formId  - Google Form ID
+   * @param webhookUrl - Full HTTPS URL Google will POST to on new submissions
+   *                     (e.g. https://leap.yourdomain.com/internal/gforms-webhook)
    */
-  async createWatch(formId: string): Promise<{ watchId: string; expireTime: string }> {
+  async createWatch(
+    formId: string,
+    webhookUrl: string,
+  ): Promise<{ watchId: string; expireTime: string }> {
     const token = await this.getAccessToken()
 
     const response = await fetch(
@@ -211,10 +207,9 @@ export class GFormsService {
         body: JSON.stringify({
           watch: {
             target: {
-              topic: {
-                // For HTTP push, use httpTarget instead of topic in production
-                // This example uses Pub/Sub; swap to httpTarget for direct HTTP delivery
-              },
+              // HTTP push: Google POSTs the notification directly to our worker.
+              // The URL must be HTTPS and publicly reachable.
+              httpTarget: { uri: webhookUrl },
             },
             eventType: 'RESPONSES',
           },

@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import type { LeapifyEnv } from '../types'
 import { createDb } from '../db'
 import { users } from '../db/schema/users'
@@ -56,7 +56,9 @@ usersRoute.post('/me/bookmarks/:eventId', authMiddleware, async (c) => {
 
   // Toggle: try insert, if exists then delete
   const existing = await db.query.bookmarks.findFirst({
-    where: eq(bookmarks.userId, user.dbId),
+    // Must match BOTH userId and eventId — matching userId alone would
+    // accidentally delete a bookmark for a different event.
+    where: and(eq(bookmarks.userId, user.dbId), eq(bookmarks.eventId, eventId)),
   })
 
   if (existing) {
@@ -76,7 +78,8 @@ usersRoute.delete('/me/bookmarks/:eventId', authMiddleware, async (c) => {
 
   await db
     .delete(bookmarks)
-    .where(eq(bookmarks.userId, user.dbId) && eq(bookmarks.eventId, eventId))
+    // JS `&&` evaluates to the right-hand eq() only — must use Drizzle and().
+    .where(and(eq(bookmarks.userId, user.dbId), eq(bookmarks.eventId, eventId)))
 
   return c.json({ data: { bookmarked: false } })
 })

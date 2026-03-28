@@ -128,13 +128,18 @@ eventsRoute.post('/', authMiddleware, adminMiddleware, zValidator('json', create
 
   // If publishing immediately, create a Google Forms Watch
   if (body.status === 'published' && body.gformsId && c.env.GFORMS_SERVICE_ACCOUNT_JSON) {
-    const gforms = new GFormsService(c.env.GFORMS_SERVICE_ACCOUNT_JSON)
-    try {
-      const watch = await gforms.createWatch(body.gformsId)
-      const expiry = Math.floor(new Date(watch.expireTime ?? '').getTime() / 1000)
-      await db.update(events).set({ watchId: watch.watchId, watchExpiresAt: expiry }).where(eq(events.id, created!.id))
-    } catch (err) {
-      console.error('[events] Failed to create Watch:', err)
+    const webhookUrl = c.get('gformsWebhookUrl')
+    if (webhookUrl) {
+      const gforms = new GFormsService(c.env.GFORMS_SERVICE_ACCOUNT_JSON)
+      try {
+        const watch = await gforms.createWatch(body.gformsId, webhookUrl)
+        const expiry = Math.floor(new Date(watch.expireTime ?? '').getTime() / 1000)
+        await db.update(events).set({ watchId: watch.watchId, watchExpiresAt: expiry }).where(eq(events.id, created!.id))
+      } catch (err) {
+        console.error('[events] Failed to create Watch:', err)
+      }
+    } else {
+      console.warn('[events] gformsWebhookUrl not configured \u2014 Watch not created. Pass gformsWebhookUrl to createLeapify().')
     }
   }
 

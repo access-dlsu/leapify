@@ -43,5 +43,10 @@ siteConfigRoute.patch('/:key', authMiddleware, adminMiddleware, async (c) => {
       set: { value: JSON.stringify(value), updatedAt: now },
     })
 
+  // Write-through to KV so the maintenance-mode middleware can read it
+  // without a D1 round-trip on every request. TTL 10 min — admin must
+  // wait at most 10 min for changes to fully propagate across all edges.
+  await c.env.KV.put(`config:${key}`, JSON.stringify(value), { expirationTtl: 600 })
+
   return c.json({ data: { key, value } })
 })

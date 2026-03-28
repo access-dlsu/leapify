@@ -125,4 +125,39 @@ describe('Users & Bookmarks API', () => {
     }, env)
     expect(res.status).toBe(404)
   })
+
+  test('API-BOOKMARKS-008: Toggle on event-A does not remove bookmark on event-B (isolation)', async () => {
+    // Regression for: toggle WHERE clause matched userId only, not userId+eventId.
+    // If user had ANY bookmark, toggling a different event would delete the wrong one.
+    const db = getTestDb()
+    const eventB = await seedEvent(db, { slug: 'e2', status: 'published' })
+
+    // Bookmark event-A (eventId from beforeEach) and event-B
+    await app.request(`/users/me/bookmarks/${eventId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    await app.request(`/users/me/bookmarks/${eventB.id}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+
+    // Toggle event-B OFF
+    const toggleRes = await app.request(`/users/me/bookmarks/${eventB.id}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    expect(toggleRes.status).toBe(200)
+    const toggleBody = await toggleRes.json() as any
+    expect(toggleBody.data.bookmarked).toBe(false)
+
+    // event-A bookmark must still exist
+    const listRes = await app.request('/users/me/bookmarks', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    }, env)
+    const listBody = await listRes.json() as any
+    expect(listBody.data).toHaveLength(1)
+    expect(listBody.data[0].event.slug).toBe('e1')
+  })
 })
