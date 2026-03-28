@@ -2,76 +2,77 @@
 
 An npm module serving as the universal backend logic layer for DLSU CSO LEAP event frontend websites.
 
-## 🚀 Overview
+## Overview
 
-Leapify acts as a server-only backend dependency designed to integrate external services (Contentful, Firebase, etc.) into a cohesive API interface. It handles data fetching, business logic, and third-party service integration, enabling consistent backend operations across various LEAP websites. 
+Leapify acts as a server-only backend dependency designed to integrate external services (CMS, Database, Emails, etc.) into a cohesive API interface. It handles data fetching, business logic, and third-party service integration, enabling consistent backend operations across various LEAP websites.
 
-Because it is built on [**Hono**](https://hono.dev/), a fast and lightweight edge framework, the module operates as an independent backend app that can be seamlessly mounted into any consumer repository. This guarantees complete compatibility with edge and serverless environments, such as **Cloudflare Workers**, **Vercel Edge/Serverless Functions**, **Dockerized Node.js containers**, and **Bun/Deno**.
+Because it is built on [**Hono**](https://hono.dev/), a fast and lightweight edge framework, the module operates as an independent backend app that can be seamlessly mounted into any consumer repository. This guarantees complete compatibility with edge and serverless environments.
 
-## 🛠️ Tech Stack & Architecture
+## Tech Stack & Architecture
 
 ### 1. Core Module Framework
-* **Hono:** The foundational web framework. It abstracts away the runtime differences, allowing you to write clean routing and middleware logic that handles `Context` effortlessly while compiling perfectly to all major edge/node runtimes.
-* **TypeScript:** For strict typing, ensuring robustness and excellent developer experience (DX) when consumed by external repos.
-* **Zod / `@hono/zod-validator`:** For native runtime schema validation of inbound data and standardizing third-party API payloads.
 
-### 2. Primary Integrations
+| Component | Technology | Purpose | Link |
+| :--- | :--- | :--- | :--- |
+| **Framework** | Hono | Foundational web framework. | [hono.dev](https://hono.dev/) |
+| **Language** | TypeScript | Strict typing for excellent DX. | [typescriptlang.org](https://www.typescriptlang.org/) |
+| **ORM** | Drizzle ORM | Edge-compatible, type-safe SQL ORM. | [orm.drizzle.team](https://orm.drizzle.team/) |
+| **Validation** | Zod | Runtime schema validation. | [zod.dev](https://zod.dev/) |
+| **Testing** | Vitest | Fast unit and integration testing. | [vitest.dev](https://vitest.dev/) |
 
-#### Contentful (Headless CMS)
-* **Purpose:** Manages LEAP event details, schedules, speaker information, and dynamic frontend page content.
-* **Implementation:** Instead of bulky server-only SDKs, use the Contentful GraphQL API or REST API directly via the native `fetch` interface, keeping the Hono module lightweight and edge-ready.
+### 2. Integrations & Infrastructure
 
-#### Firebase (Authentication & Realtime/Document Database)
-* **Purpose:** Handles user sign-ins, session management, and stores dynamic/user-generated data (e.g., event registrations, feedback, live Q&A).
-* **Implementation:** For Edge support, use the REST APIs for database operations and Firebase Auth's ID token verification, or edge-compatible specific SDK modules, deliberately avoiding the heavyweight Node-only `firebase-admin` module.
+| Category | Service | Details | Quota | Link |
+| :--- | :--- | :--- | :--- | :--- |
+| **Relational DB** | Cloudflare D1 | Serverless SQLite (Native Edge/Drizzle) | 5M reads/day, 100k writes/day, 25GB (Workers Pro) | [Cloudflare D1](https://developers.cloudflare.com/d1/) |
+| **Object Storage** | Cloudflare R2 | Edge Object Storage (S3-compatible) | 10 GB Storage, 1M reads/mo | [Cloudflare R2](https://developers.cloudflare.com/r2/) |
+| **Authentication** | Firebase Auth | Google Focused / REST Identity Toolkit | (Usage-based free tier) | [Firebase Auth](https://firebase.google.com/docs/auth) |
+| **Headless CMS** | Contentful | Structured Content (GraphQL / REST) | 100K API calls/mo, 50 GB CDN bandwidth/mo (Free) | [contentful.com](https://www.contentful.com/) |
+| **Email Service** | Resend | Transactional Email (fetch/REST native) | 50,000 emails/mo (Pro) | [resend.com](https://resend.com) |
+| **Cache & KV** | Cloudflare KV | Global Edge Key-Value Store | 10M reads/day (Workers Pro) | [Cloudflare KV](https://developers.cloudflare.com/kv/) |
 
-### 3. Recommended Additional Integrations
+### 3. API & Service Compatibility
 
-#### Email Services (Resend / SendGrid)
-* **Purpose:** Sending ticket confirmations, event reminders, and announcements to attendees.
-* **Implementation:** Simple REST API integrations using `fetch`. Resend is highly recommended as it relies purely on Edge-compatible web standards.
+While Cloudflare is the default infrastructure choice, Leapify is architected using **standard web APIs** and **adapter-friendly logic**. It remains functionally compatible with other enterprise and edge-ready service providers, including:
 
-#### Storage / Cache (Upstash Redis)
-* **Purpose:** Rate limiting, session caching, and reducing Contentful/Firebase read operations during high traffic spikes.
-* **Implementation:** Upstash provides a REST-based Redis approach standardizing the connection and making it perfect for serverless endpoints without TCP dependencies.
+* **Databases:** Any Postgres or SQLite provider supported by Drizzle (e.g., Neon, Turso, Supabase, PlanetScale).
+* **Storage:** Any **S3-compatible** storage (e.g., AWS S3, Backblaze B2, Supabase Storage).
+* **CMS:** Other headless providers with GraphQL or REST APIs (e.g., Sanity, Hygraph).
+* **Cache:** Alternatives like **Upstash Redis** (via REST) for high-frequency state management.
 
-#### Database Alternative (Supabase / Postgres)
-* **Purpose:** For highly structured relational data (e.g., rigid ticketing transactions, seating, accounting).
-* **Implementation:** Utilizing `@supabase/supabase-js`, which relies on standard `fetch` and is fully compatible with Edge deployment environments.
+### 4. Resilience & Scale Mitigations
 
-## 🌐 Supported Runtimes & Deployment
+Designed with a peak load of **~30,000 concurrent students** in mind. The following patterns are implemented or recommended within the module.
 
-Leapify encapsulates an entire API routing structure using Hono. Consumers of this module simply import the Leapify Hono router and mount or adapt it into their deployment strategy:
+#### Authentication Resilience (Firebase Auth)
 
-* **Vercel (Next.js App Router):** Serve the entire Leapify Hono app via a `route.ts` API handler using `handle(app)`.
-* **Cloudflare Workers:** Export the `app.fetch` object directly at the root.
-* **Docker / Traditional Node.js (Express):** Adapt the Hono app to an underlying Node HTTP server using `@hono/node-server`.
-* **Bun / Deno:** Pass the Hono app natively into the standard web server startup commands.
+Firebase Identity Toolkit has implicit rate limits that can surface as `429` errors under simultaneous auth bursts at event open.
 
-## 📦 Usage Example (Conceptual)
+| Strategy | Description |
+| :--- | :--- |
+| **KV Token Caching** | After first successful ID token verification, cache the decoded user payload in Cloudflare KV (`auth:token:<uid>`) with a TTL matching token expiry (3,600s). Subsequent requests skip Firebase entirely. |
+| **Exponential Backoff** | Auth middleware retries on `429` responses using `100ms → 200ms → 400ms` backoff before surfacing an error to the client. |
+| **Staggered Sign-in** | Coordinate with frontend consumers to open sign-in 15 minutes before event content go-live to naturally distribute auth load over time. |
+| **GCP Quota Increase** | Submit a Firebase Auth quota increase request in GCP Console at least 72 hours before major events. |
 
-```typescript
-// leapify/index.ts (Inside the Npm Module)
-import { Hono } from 'hono';
+#### Async Job Handling
 
-export const app = new Hono();
+Synchronous side effects (email dispatch, audit logging) block HTTP response times under load. All non-critical side effects are handled asynchronously.
 
-app.get('/events', async (c) => {
-  // Logic communicating with Contentful/Firebase/Zod
-  return c.json({ data: [{ name: "LEAP Event 1" }] });
-});
+| Strategy | Use Case | Implementation |
+| :--- | :--- | :--- |
+| **`ctx.waitUntil()`** | Fire-and-forget tasks (audit logs, analytics) | Runs after response is sent without blocking it. Zero latency impact on the client. |
+| **Cloudflare Queues** | Email dispatch, webhook triggers | Worker pushes to a CF Queue → Consumer Worker processes and calls Resend. Client gets an instant `202 Accepted`. |
+| **Dead Letter Queue (DLQ)** | Failed email jobs | CF Queue retries automatically up to the retry limit, then parks in DLQ for inspection. No silent failures. |
 
-export default app;
-```
+---
 
-```typescript
-// CONSUMER APP: Next.js App Router Setup (app/api/[[...route]]/route.ts)
-import { handle } from 'hono/vercel';
-import leapifyApp from 'leapify'; // The exported Hono router from the module
+## Supported Runtimes & Deployment
 
-// Mount the Leapify module as a sub-router to automatically handle all /api endpoints
-export const GET = handle(leapifyApp);
-export const POST = handle(leapifyApp);
-export const PUT = handle(leapifyApp);
-export const DELETE = handle(leapifyApp);
-```
+| Platform | Deployment Method |
+| :--- | :--- |
+| **Cloudflare** | Workers & Pages |
+| **Vercel** | Edge Functions / Serverless Functions |
+| **Node.js** | Compatible with any Node.js environment (Docker, bare metal, etc.) |
+| **Bun** | Native `bun run` |
+| **Deno** | Native `Deno.serve` |
