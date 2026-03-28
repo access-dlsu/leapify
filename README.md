@@ -8,7 +8,31 @@ Leapify acts as a server-only backend dependency designed to integrate external 
 
 Because it is built on [**Hono**](https://hono.dev/), a fast and lightweight edge framework, the module operates as an independent backend app that can be seamlessly mounted into any consumer repository. This guarantees complete compatibility with edge and serverless environments.
 
-## Tech Stack & Architecture
+## 📦 Quick Start (Zero-Config Consumer Setup)
+
+Leapify is designed to be installed as an npm package and dropped into a Cloudflare Worker repository. No source code forks required.
+
+### 1. Install
+```sh
+npm install leapify
+```
+
+### 2. Export in `src/worker.ts`
+```ts
+import { createLeapify } from 'leapify'
+
+// Passes through the fetch, scheduled, and queue handlers to Cloudflare
+export default createLeapify({
+  allowedOrigins: ['https://your-frontend-domain.com'],
+})
+```
+
+### 3. Configure `wrangler.toml`
+Set up the bindings required by Leapify (D1, KV, Queues, Crons). See the [Environment Variables & Config](#environment-variables--config) section below for the required shape.
+
+---
+
+## 🏗️ Architecture Overview
 
 ### 1. Core Module Framework
 

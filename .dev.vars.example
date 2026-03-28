@@ -1,0 +1,33 @@
+# Leapify — Local Development Secrets
+# Copy this file to .dev.vars and fill in your values.
+# .dev.vars is the Wrangler equivalent of .env for local `wrangler dev`.
+# NEVER commit .dev.vars to git.
+
+# ─── Firebase ────────────────────────────────────────────────────────────────
+FIREBASE_PROJECT_ID="your-firebase-project-id"
+FIREBASE_WEB_API_KEY="AIzaSy..."
+
+# ─── Google Forms Service Account ────────────────────────────────────────────
+# Go to GCP Console → IAM → Service Accounts → Create → Download JSON key.
+# Grant the service account "Forms API" access in the Cloud Console.
+# Paste the full JSON as a single line (escape inner quotes with \").
+GFORMS_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"...","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"leapify@your-project.iam.gserviceaccount.com","client_id":"..."}'
+
+# Google Forms Watch webhook signing secret.
+# Generate with: openssl rand -hex 32
+# This EXACT value must be provided when calling forms.watches.create.
+GFORMS_WEBHOOK_SECRET="your-32-char-random-hex-secret"
+
+# ─── Contentful CMS ──────────────────────────────────────────────────────────
+CONTENTFUL_SPACE_ID="your-space-id"
+CONTENTFUL_ACCESS_TOKEN="your-content-delivery-api-token"
+CONTENTFUL_ENVIRONMENT="master"
+
+# ─── Resend (Transactional Email) ────────────────────────────────────────────
+RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxx"
+RESEND_FROM_ADDRESS="noreply@yourdomain.com"
+
+# ─── Internal Route Security ─────────────────────────────────────────────────
+# Used to protect /internal/* routes (e.g. gforms webhook) from spoofing.
+# Generate with: openssl rand -hex 32
+INTERNAL_API_SECRET="your-32-char-random-hex-secret"

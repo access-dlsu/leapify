@@ -1,0 +1,55 @@
+name = "your-leap-worker"
+main = "src/worker.ts"          # path in consumer repo's worker entry
+compatibility_date = "2024-12-30"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── Cloudflare D1 (Relational Database) ─────────────────────────────────────
+[[d1_databases]]
+binding      = "DB"
+database_name = "leapify"
+database_id  = "your-d1-database-id"   # from `wrangler d1 create leapify`
+
+# ─── Cloudflare KV (Cache & Auth Tokens) ─────────────────────────────────────
+[[kv_namespaces]]
+binding = "KV"
+id      = "your-kv-namespace-id"       # from `wrangler kv namespace create LEAPIFY_KV`
+
+# ─── Cloudflare R2 (File Storage) ────────────────────────────────────────────
+[[r2_buckets]]
+binding     = "FILES"
+bucket_name = "leapify-files"
+
+# ─── Cloudflare Queues (Async Jobs) ──────────────────────────────────────────
+[[queues.producers]]
+binding    = "EMAIL_QUEUE"
+queue_name = "leapify-email-queue"
+
+[[queues.consumers]]
+queue             = "leapify-email-queue"
+max_batch_size    = 10
+max_batch_timeout = 30
+max_retries       = 3
+dead_letter_queue = "leapify-email-dlq"
+
+# ─── Cron Triggers ───────────────────────────────────────────────────────────
+[triggers]
+crons = [
+  "* * * * *",     # batch-release   — publish queued events (every 1 min)
+  "*/5 * * * *",   # reconcile-slots — D1 vs Google Forms drift fix (every 5 min)
+  "0 * * * *",     # reminder-emails + lifecycle-check (every hour)
+  "0 0 * * *",     # renew-watches   — renew expiring Google Forms Watches (daily)
+]
+
+# ─── Secrets (set via `wrangler secret put <NAME>`) ──────────────────────────
+# Do NOT put secret values here. Use `wrangler secret put` for each:
+#
+#   wrangler secret put FIREBASE_PROJECT_ID
+#   wrangler secret put FIREBASE_WEB_API_KEY
+#   wrangler secret put GFORMS_SERVICE_ACCOUNT_JSON
+#   wrangler secret put GFORMS_WEBHOOK_SECRET
+#   wrangler secret put CONTENTFUL_SPACE_ID
+#   wrangler secret put CONTENTFUL_ACCESS_TOKEN
+#   wrangler secret put CONTENTFUL_ENVIRONMENT
+#   wrangler secret put RESEND_API_KEY
+#   wrangler secret put RESEND_FROM_ADDRESS
+#   wrangler secret put INTERNAL_API_SECRET

@@ -1,7 +1,48 @@
 {
   "name": "leapify",
   "version": "0.1.0",
-  "description": "",
+  "description": "Universal backend logic layer for DLSU CSO LEAP event websites",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "peerDependencies": {
+    "@cloudflare/workers-types": "^4.0.0",
+    "hono": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@cloudflare/workers-types": { "optional": true }
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.4.0",
+    "drizzle-orm": "^0.38.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "drizzle-kit": "^0.29.0",
+    "hono": "^4.7.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
   "homepage": "https://github.com/access-dlsu/leapify#readme",
   "bugs": {
     "url": "https://github.com/access-dlsu/leapify/issues"
@@ -11,10 +52,5 @@
     "url": "git+https://github.com/access-dlsu/leapify.git"
   },
   "license": "MIT",
-  "author": "",
-  "type": "commonjs",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  }
+  "author": "ACCESS DLSU"
 }
