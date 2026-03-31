@@ -1,7 +1,7 @@
 {
   "name": "leapify",
   "version": "0.1.0",
-  "description": "Universal backend logic layer for DLSU CSO LEAP event websites",
+  "description": "Fullstack npm module for DLSU CSO LEAP event websites — server handler and browser-safe typed API client in one package",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

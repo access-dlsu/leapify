@@ -1,27 +1,23 @@
 /**
- * Leapify — Universal backend module for DLSU CSO LEAP event websites.
- * Published to npm. Consumers drop it in and export it directly.
+ * Leapify — Fullstack npm module for DLSU CSO LEAP event websites.
  *
- * Consumer usage (zero source-code changes required)
+ * This file is the **server-side entry point**. It exports createLeapify(),
+ * a Cloudflare Workers-compatible handler. Mount it in your server layer:
  *
- * // worker.ts
+ * // Next.js API route / SvelteKit endpoint / Cloudflare Pages Function / worker.ts
  * import { createLeapify } from 'leapify'
  *
  * export default createLeapify({
  *   allowedOrigins: ['https://yourleapsite.com'],
  * })
  *
- * That's it. `createLeapify` returns an object shaped for CF Workers:
- *   { fetch, scheduled, queue }
+ * createLeapify() returns { fetch, scheduled, queue } — shaped for CF Workers.
+ * See wrangler.toml.example for required bindings (D1, KV, Queues, Crons).
  *
- * wrangler.toml
- * main = "worker.ts"
- * (see wrangler.toml.example in the package for full config)
+ * For browser / client-component usage, import from 'leapify/client' instead:
  *
- * ⚠️  SERVER-ONLY MODULE
- * This entry point is for Cloudflare Workers / server runtimes only.
- * Do NOT import it in browser or client-component code.
- * Use 'leapify/client' for browser-safe typed API utilities.
+ * import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
+ * import type { LeapEvent } from 'leapify/types'
  */
 
 if (typeof document !== "undefined") {

@@ -1,51 +1,67 @@
-# Leapify: Backend Core Module
+# Leapify: Fullstack npm Module
 
-An npm module serving as the universal backend logic layer for DLSU CSO LEAP event frontend websites.
+A fullstack npm module — install it on your frontend project and it covers both sides of the stack: a browser-safe typed API client (`leapify/client`) and a server-side event management handler (`createLeapify`).
 
 ## Overview
 
-Leapify acts as a server-only backend dependency designed to integrate external services (CMS, Database, Emails, etc.) into a cohesive API interface. It handles data fetching, business logic, and third-party service integration, enabling consistent backend operations across various LEAP websites.
+Leapify is a fullstack npm module for DLSU CSO LEAP event websites. It integrates external services (Firebase Auth, Cloudflare D1, Google Forms, Contentful, Resend) into a cohesive API interface, enabling consistent event management operations across various LEAP websites.
 
-Because it is built on [**Hono**](https://hono.dev/), a fast and lightweight edge framework, the module operates as an independent backend app that can be seamlessly mounted into any consumer repository. This guarantees complete compatibility with edge and serverless environments.
+Because it is built on [**Hono**](https://hono.dev/), a fast and lightweight edge framework, the server handler can be seamlessly mounted into any server layer — Next.js API routes, SvelteKit endpoints, Cloudflare Pages Functions, or a standalone Cloudflare Worker.
 
-## 📦 Quick Start (Zero-Config Consumer Setup)
+## ⚡ Quick Start
 
-Leapify is designed to be installed as an npm package and dropped into a Cloudflare Worker repository. No source code forks required.
+### 1. Install on your frontend project
 
-### 1. Install
 ```sh
 npm install leapify
 ```
 
-### 2. Export in `src/worker.ts`
+### 2. Browser / client components — `leapify/client`
+
+```ts
+import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
+import type { LeapEvent, SiteConfig } from 'leapify/types'
+import { auth } from '@/lib/firebase' // your Firebase auth instance
+
+const api = createLeapifyClient(
+  process.env.NEXT_PUBLIC_API_URL!,
+  () => getLeapifyToken(auth.currentUser),
+)
+
+const events = await api.getEvents()  // → LeapEvent[]
+const config = await api.getConfig()  // → SiteConfig (maintenanceMode, registrationGloballyOpen, …)
+const me     = await api.getMe()      // → UserProfile | null
+```
+
+### 3. Server layer — Next.js route / SvelteKit endpoint / Pages Function
+
 ```ts
 import { createLeapify } from 'leapify'
 
-// Passes through the fetch, scheduled, and queue handlers to Cloudflare
 export default createLeapify({
-  allowedOrigins: ['https://your-frontend-domain.com'],
+  allowedOrigins: ['https://yourdomain.com'],
 })
 ```
 
-### 3. Configure `wrangler.toml`
-Set up the bindings required by Leapify (D1, KV, Queues, Crons). See the [Environment Variables & Config](#environment-variables--config) section below for the required shape.
+### 4. Cloudflare bindings
+
+Set up D1, KV, Queues, and secrets in `wrangler.toml` — see [☁️ Deployment](#️-deployment) below.
+
+> Full setup, Firebase auth wiring, per-endpoint examples, and error handling →
+> **[Frontend Integration Guide](./docs/frontend-integration-guide.md)**
 
 ---
 
-## 🌐 Frontend Integration
+## ☁️ Deployment
 
-Leapify is also installable on the frontend project. A single `npm install leapify` covers both sides of the stack:
+Leapify targets **Cloudflare Workers** (standalone backend) or **Cloudflare Pages Functions** (colocated with your frontend). Configure `wrangler.toml` with the required bindings — see [wrangler.toml.example](./wrangler.toml.example) for the full shape and [`.dev.vars.example`](./.dev.vars.example) for the secrets list.
 
-- **Server side** — your framework's server runtime (Next.js API routes, SvelteKit endpoints, Cloudflare Pages Functions) mounts `createLeapify` as the backend handler.
-- **Client side** — browser components import from `leapify/client` for a typed fetch API with zero Cloudflare/server dependencies.
-
-```ts
-// Browser / client components
-import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
-import type { LeapEvent, SiteConfig } from 'leapify/types'
-```
-
-See the **[Frontend Integration Guide](./docs/frontend-integration-guide.md)** for step-by-step setup, Firebase auth wiring, per-endpoint examples, error handling, and the admin gate pattern.
+| Platform | Method |
+| :--- | :--- |
+| **Cloudflare Workers** | `wrangler deploy` — standalone backend worker |
+| **Cloudflare Pages** | Pages Function colocated with your frontend project |
+| **Vercel** | Edge Functions / Serverless Functions |
+| **Node.js / Bun / Deno** | Any server runtime (adapt bindings as needed) |
 
 ---
 
@@ -106,14 +122,3 @@ Synchronous side effects (email dispatch, audit logging) block HTTP response tim
 | **Cloudflare Queues** | Email dispatch, webhook triggers | Worker pushes to a CF Queue → Consumer Worker processes and calls Resend. Client gets an instant `202 Accepted`. |
 | **Dead Letter Queue (DLQ)** | Failed email jobs | CF Queue retries automatically up to the retry limit, then parks in DLQ for inspection. No silent failures. |
 
----
-
-## Supported Runtimes & Deployment
-
-| Platform | Deployment Method |
-| :--- | :--- |
-| **Cloudflare** | Workers & Pages |
-| **Vercel** | Edge Functions / Serverless Functions |
-| **Node.js** | Compatible with any Node.js environment (Docker, bare metal, etc.) |
-| **Bun** | Native `bun run` |
-| **Deno** | Native `Deno.serve` |
