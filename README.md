@@ -32,6 +32,23 @@ Set up the bindings required by Leapify (D1, KV, Queues, Crons). See the [Enviro
 
 ---
 
+## 🌐 Frontend Integration
+
+Leapify is also installable on the frontend project. A single `npm install leapify` covers both sides of the stack:
+
+- **Server side** — your framework's server runtime (Next.js API routes, SvelteKit endpoints, Cloudflare Pages Functions) mounts `createLeapify` as the backend handler.
+- **Client side** — browser components import from `leapify/client` for a typed fetch API with zero Cloudflare/server dependencies.
+
+```ts
+// Browser / client components
+import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
+import type { LeapEvent, SiteConfig } from 'leapify/types'
+```
+
+See the **[Frontend Integration Guide](./docs/frontend-integration-guide.md)** for step-by-step setup, Firebase auth wiring, per-endpoint examples, error handling, and the admin gate pattern.
+
+---
+
 ## 🏗️ Architecture Overview
 
 ### 1. Core Module Framework

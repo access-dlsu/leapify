@@ -17,7 +17,20 @@
  * wrangler.toml
  * main = "worker.ts"
  * (see wrangler.toml.example in the package for full config)
+ *
+ * ⚠️  SERVER-ONLY MODULE
+ * This entry point is for Cloudflare Workers / server runtimes only.
+ * Do NOT import it in browser or client-component code.
+ * Use 'leapify/client' for browser-safe typed API utilities.
  */
+
+if (typeof document !== "undefined") {
+  throw new Error(
+    "[leapify] This module is server-only (Cloudflare Workers / server runtimes). " +
+    "Do not import it in browser or client-component code. " +
+    "Use 'leapify/client' for browser-safe typed API utilities.",
+  );
+}
 
 import { createApp, type LeapifyAppOptions } from "./app";
 import { createQueueHandler } from "./queues/handlers";
