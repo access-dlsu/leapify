@@ -1,7 +1,15 @@
 name = "your-leap-worker"
-main = "src/worker.ts"          # path in consumer repo's worker entry
 compatibility_date = "2024-12-30"
 compatibility_flags = ["nodejs_compat"]
+
+# ── Mode 1: Standalone Worker ────────────────────────────────────────────
+# Point `main` at the pre-built worker bundle.
+# Build it first: npm run build  (or npx tsup)
+main = "dist/worker.js"
+#
+# ── Mode 2: npm module (mounted in your own worker) ──────────────────────
+# Comment out the line above and point main at your own worker entry, e.g.:
+# main = "src/worker.ts"   ← your file that calls createLeapify()
 
 # Cloudflare D1 (Relational Database) 
 [[d1_databases]]
@@ -14,12 +22,12 @@ database_id  = "your-d1-database-id"   # from `wrangler d1 create leapify`
 binding = "KV"
 id      = "your-kv-namespace-id"       # from `wrangler kv namespace create LEAPIFY_KV`
 
-# Cloudflare R2 (File Storage) 
+# Cloudflare R2 (File Storage — optional) 
 [[r2_buckets]]
 binding     = "FILES"
 bucket_name = "leapify-files"
 
-# Cloudflare Queues (Async Jobs) 
+# Cloudflare Queues (Async Jobs — email, audit, snapshots, watch renewals)
 [[queues.producers]]
 binding    = "EMAIL_QUEUE"
 queue_name = "leapify-email-queue"
@@ -43,6 +51,12 @@ crons = [
 # Secrets (set via `wrangler secret put <NAME>`) 
 # Do NOT put secret values here. Use `wrangler secret put` for each:
 #
+# ── CORS (standalone mode only) ───────────────────────────────────────
+#  wrangler secret put ALLOWED_ORIGINS
+#  # value: comma-separated list, e.g. "https://yoursite.com,https://www.yoursite.com"
+#  # omit (or set to "") to block all cross-origin requests
+#
+# ── Core ──────────────────────────────────────────────────────────────
 #  wrangler secret put FIREBASE_PROJECT_ID
 #  wrangler secret put FIREBASE_WEB_API_KEY
 #  wrangler secret put GFORMS_SERVICE_ACCOUNT_JSON
@@ -50,6 +64,14 @@ crons = [
 #  wrangler secret put CONTENTFUL_SPACE_ID
 #  wrangler secret put CONTENTFUL_ACCESS_TOKEN
 #  wrangler secret put CONTENTFUL_ENVIRONMENT
-#  wrangler secret put RESEND_API_KEY
-#  wrangler secret put RESEND_FROM_ADDRESS
 #  wrangler secret put INTERNAL_API_SECRET
+#
+# ── Email: Amazon SES (primary — REQUIRED for email) ──────────────────
+#  wrangler secret put SES_REGION            # e.g. us-east-1
+#  wrangler secret put SES_ACCESS_KEY_ID     # IAM user (ses:SendEmail permission)
+#  wrangler secret put SES_SECRET_ACCESS_KEY
+#  wrangler secret put SES_FROM_ADDRESS      # verified SES identity
+#
+# ── Email: Resend (optional fallback) ─────────────────────────────────
+#  wrangler secret put RESEND_API_KEY        # omit to disable fallback entirely
+#  wrangler secret put RESEND_FROM_ADDRESS

@@ -1,39 +1,90 @@
-# Leapify: Fullstack npm Module
+# Leapify
 
-A fullstack npm module — install it on your frontend project and it covers both sides of the stack: a browser-safe typed API client (`leapify/client`) and a server-side event management handler (`createLeapify`).
+The backend for DLSU CSO LEAP event websites. Leapify ships as:
 
-## Overview
+| Mode | When to use |
+| :--- | :--- |
+| **Standalone Worker** | You want a zero-code deploy — just configure secrets and run `wrangler deploy` |
+| **npm module** | You have your own Worker / Next.js / SvelteKit app and want to mount Leapify inside it |
 
-Leapify is a fullstack npm module for DLSU CSO LEAP event websites. It integrates external services (Firebase Auth, Cloudflare D1, Google Forms, Contentful, Resend) into a cohesive API interface, enabling consistent event management operations across various LEAP websites.
+Both modes share exactly the same routes, auth, caching, and email logic.
 
-Because it is built on [**Hono**](https://hono.dev/), a fast and lightweight edge framework, the server handler can be seamlessly mounted into any server layer — Next.js API routes, SvelteKit endpoints, Cloudflare Pages Functions, or a standalone Cloudflare Worker.
+---
 
-## ⚡ Quick Start
+## Mode 1 — Standalone Worker
 
-### 1. Install on your frontend project
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/access-dlsu/leapify)
+
+No code required. Clone, configure, deploy.
+
+```sh
+git clone https://github.com/access-dlsu/leapify
+cd leapify
+npm install
+cp wrangler.toml.example wrangler.toml
+```
+
+Edit `wrangler.toml` with your D1 database ID and KV namespace ID, then set your secrets:
+
+```sh
+# CORS — comma-separated allowed origins
+wrangler secret put ALLOWED_ORIGINS
+# → "https://yoursite.com,https://www.yoursite.com"
+
+# Firebase
+wrangler secret put FIREBASE_PROJECT_ID
+wrangler secret put FIREBASE_WEB_API_KEY
+
+# Google Forms
+wrangler secret put GFORMS_SERVICE_ACCOUNT_JSON
+wrangler secret put GFORMS_WEBHOOK_SECRET
+
+# Contentful
+wrangler secret put CONTENTFUL_SPACE_ID
+wrangler secret put CONTENTFUL_ACCESS_TOKEN
+wrangler secret put CONTENTFUL_ENVIRONMENT
+
+# Amazon SES (primary email)
+wrangler secret put SES_REGION
+wrangler secret put SES_ACCESS_KEY_ID
+wrangler secret put SES_SECRET_ACCESS_KEY
+wrangler secret put SES_FROM_ADDRESS
+
+# Resend (optional email fallback — omit to disable)
+wrangler secret put RESEND_API_KEY
+wrangler secret put RESEND_FROM_ADDRESS
+
+# Internal route security
+wrangler secret put INTERNAL_API_SECRET
+```
+
+Build and deploy:
+
+```sh
+npm run build
+wrangler deploy
+```
+
+Verify:
+
+```sh
+curl https://your-worker.your-subdomain.workers.dev/health
+# → { "status": "ok", "providers": { "ses": true, "resend": false } }
+```
+
+> `wrangler.toml.example` has full comments for every binding. See [.dev.vars.example](./.dev.vars.example) for local dev.
+
+---
+
+## Mode 2 — npm module
+
+Install into your own project and mount the handler:
 
 ```sh
 npm install leapify
 ```
 
-### 2. Browser / client components — `leapify/client`
-
-```ts
-import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
-import type { LeapEvent, SiteConfig } from 'leapify/types'
-import { auth } from '@/lib/firebase' // your Firebase auth instance
-
-const api = createLeapifyClient(
-  process.env.NEXT_PUBLIC_API_URL!,
-  () => getLeapifyToken(auth.currentUser),
-)
-
-const events = await api.getEvents()  // → LeapEvent[]
-const config = await api.getConfig()  // → SiteConfig (maintenanceMode, registrationGloballyOpen, …)
-const me     = await api.getMe()      // → UserProfile | null
-```
-
-### 3. Server layer — Next.js route / SvelteKit endpoint / Pages Function
+**Server layer** (Cloudflare Worker / Pages Function):
 
 ```ts
 import { createLeapify } from 'leapify'
@@ -43,82 +94,112 @@ export default createLeapify({
 })
 ```
 
-### 4. Cloudflare bindings
+**Browser / client components**:
 
-Set up D1, KV, Queues, and secrets in `wrangler.toml` — see [☁️ Deployment](#️-deployment) below.
+```ts
+import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
+import { auth } from '@/lib/firebase'
 
-> Full setup, Firebase auth wiring, per-endpoint examples, and error handling →
-> **[Frontend Integration Guide](./docs/frontend-integration-guide.md)**
+const api = createLeapifyClient(
+  process.env.NEXT_PUBLIC_API_URL!,
+  () => getLeapifyToken(auth.currentUser),
+)
 
----
+const events = await api.getEvents()   // → LeapEvent[]
+const config = await api.getConfig()   // → SiteConfig
+const me     = await api.getMe()       // → UserProfile | null
+```
 
-## ☁️ Deployment
-
-Leapify targets **Cloudflare Workers** (standalone backend) or **Cloudflare Pages Functions** (colocated with your frontend). Configure `wrangler.toml` with the required bindings — see [wrangler.toml.example](./wrangler.toml.example) for the full shape and [`.dev.vars.example`](./.dev.vars.example) for the secrets list.
-
-| Platform | Method |
-| :--- | :--- |
-| **Cloudflare Workers** | `wrangler deploy` — standalone backend worker |
-| **Cloudflare Pages** | Pages Function colocated with your frontend project |
-| **Vercel** | Edge Functions / Serverless Functions |
-| **Node.js / Bun / Deno** | Any server runtime (adapt bindings as needed) |
+> Full setup and per-endpoint examples → **[Frontend Integration Guide](./docs/frontend-integration-guide.md)**
 
 ---
 
-## 🏗️ Architecture Overview
+## How It Works
 
-### 1. Core Module Framework
+Leapify exposes `/api/` endpoints that your frontend consumes. The backend handles Firebase Auth, Cloudflare D1 (database), Contentful (CMS), and transactional email (Amazon SES primary / Resend fallback) — all credentials live in `.env` / `wrangler.toml`, never in browser code.
 
-| Component | Technology | Purpose | Link |
-| :--- | :--- | :--- | :--- |
-| **Framework** | Hono | Foundational web framework. | [hono.dev](https://hono.dev/) |
-| **Language** | TypeScript | Strict typing for excellent DX. | [typescriptlang.org](https://www.typescriptlang.org/) |
-| **ORM** | Drizzle ORM | Edge-compatible, type-safe SQL ORM. | [orm.drizzle.team](https://orm.drizzle.team/) |
-| **Validation** | Zod | Runtime schema validation. | [zod.dev](https://zod.dev/) |
-| **Testing** | Vitest | Fast unit and integration testing. | [vitest.dev](https://vitest.dev/) |
+- `/api/*` — restricted to your site's origin (`allowedOrigins` CORS gate)
+- `/health` — publicly accessible for uptime monitoring; reports which email providers are configured
 
-### 2. Integrations & Infrastructure
+---
 
-| Category | Service | Details | Quota | Link |
-| :--- | :--- | :--- | :--- | :--- |
-| **Relational DB** | Cloudflare D1 | Serverless SQLite (Native Edge/Drizzle) | 5M reads/day, 100k writes/day, 25GB (Workers Pro) | [Cloudflare D1](https://developers.cloudflare.com/d1/) |
-| **Object Storage** | Cloudflare R2 | Edge Object Storage (S3-compatible) | 10 GB Storage, 1M reads/mo | [Cloudflare R2](https://developers.cloudflare.com/r2/) |
-| **Authentication** | Firebase Auth | Google Focused / REST Identity Toolkit | (Usage-based free tier) | [Firebase Auth](https://firebase.google.com/docs/auth) |
-| **Headless CMS** | Contentful | Structured Content (GraphQL / REST) | 100K API calls/mo, 50 GB CDN bandwidth/mo (Free) | [contentful.com](https://www.contentful.com/) |
-| **Email Service** | Resend | Transactional Email (fetch/REST native) | 50,000 emails/mo (Pro) | [resend.com](https://resend.com) |
-| **Cache & KV** | Cloudflare KV | Global Edge Key-Value Store | 10M reads/day (Workers Pro) | [Cloudflare KV](https://developers.cloudflare.com/kv/) |
+## Tech Stack
 
-### 3. API & Service Compatibility
+| Layer          | Technology              | Purpose                                                    |
+| :------------- | :---------------------- | :--------------------------------------------------------- |
+| **Framework**  | Hono                    | Edge-optimized, <1ms cold start                            |
+| **ORM**        | Drizzle + D1            | Type-safe SQL on Cloudflare's serverless SQLite             |
+| **Validation** | Zod                     | Runtime schema validation                                  |
+| **Cache**      | Cloudflare KV + CDN     | JWT caching, slot availability, edge response cache        |
+| **CMS**        | Contentful              | Headless CMS for all event/FAQ/site content                |
+| **Email**      | Amazon SES + CF Queues  | Async transactional email — SES primary, Resend fallback   |
+| **Auth**       | Firebase Auth           | Google Sign-In, restricted to `@dlsu.edu.ph`               |
+| **Testing**    | Vitest + CF pool        | Unit + integration tests on real CF runtime                |
 
-While Cloudflare is the default infrastructure choice, Leapify is architected using **standard web APIs** and **adapter-friendly logic**. It remains functionally compatible with other enterprise and edge-ready service providers, including:
+---
 
-* **Databases:** Any Postgres or SQLite provider supported by Drizzle (e.g., Neon, Turso, Supabase, PlanetScale).
-* **Storage:** Any **S3-compatible** storage (e.g., AWS S3, Backblaze B2, Supabase Storage).
-* **CMS:** Other headless providers with GraphQL or REST APIs (e.g., Sanity, Hygraph).
-* **Cache:** Alternatives like **Upstash Redis** (via REST) for high-frequency state management.
+## Infrastructure
 
-### 4. Resilience & Scale Mitigations
+| Service           | Quota                                         | Role                          |
+| :---------------- | :-------------------------------------------- | :---------------------------- |
+| Cloudflare D1     | 5M reads/day, 100k writes/day (Pro)           | Primary relational database   |
+| Cloudflare KV     | 10M reads/day (Pro)                           | JWT cache + slot availability |
+| Cloudflare Queues | —                                             | Async job dispatch            |
+| Contentful        | 100k API calls/mo, 50GB CDN (Free)            | All CMS content               |
+| Firebase Auth     | Usage-based                                   | Identity + JWT issuance       |
+| Amazon SES        | ~62k emails/mo free tier; $0.10/1k after      | Primary transactional email   |
+| Resend            | 50k emails/mo (Pro)                           | Fallback transactional email  |
 
-Designed with a peak load of **~30,000 concurrent students** in mind. The following patterns are implemented or recommended within the module.
+---
 
-#### Authentication Resilience (Firebase Auth)
+## Caching Strategy
 
-Firebase Identity Toolkit has implicit rate limits that can surface as `429` errors under simultaneous auth bursts at event open.
+Three Cloudflare cache tiers keep D1/Firebase within quota at 30k concurrent users:
 
-| Strategy | Description |
-| :--- | :--- |
-| **KV Token Caching** | After first successful ID token verification, cache the decoded user payload in Cloudflare KV (`auth:token:<uid>`) with a TTL matching token expiry (3,600s). Subsequent requests skip Firebase entirely. |
-| **Exponential Backoff** | Auth middleware retries on `429` responses using `100ms → 200ms → 400ms` backoff before surfacing an error to the client. |
-| **Staggered Sign-in** | Coordinate with frontend consumers to open sign-in 15 minutes before event content go-live to naturally distribute auth load over time. |
-| **GCP Quota Increase** | Submit a Firebase Auth quota increase request in GCP Console at least 72 hours before major events. |
+| Tier          | TTL    | What it caches                  |
+| :------------ | :----- | :------------------------------ |
+| CF CDN Edge   | 7 days | `GET /events` list (ETag-gated) |
+| CF KV         | 3,600s | Firebase JWT tokens             |
+| CF KV         | 5s     | Slot availability per event     |
 
-#### Async Job Handling
+---
 
-Synchronous side effects (email dispatch, audit logging) block HTTP response times under load. All non-critical side effects are handled asynchronously.
+## Auth
 
-| Strategy | Use Case | Implementation |
-| :--- | :--- | :--- |
-| **`ctx.waitUntil()`** | Fire-and-forget tasks (audit logs, analytics) | Runs after response is sent without blocking it. Zero latency impact on the client. |
-| **Cloudflare Queues** | Email dispatch, webhook triggers | Worker pushes to a CF Queue → Consumer Worker processes and calls Resend. Client gets an instant `202 Accepted`. |
-| **Dead Letter Queue (DLQ)** | Failed email jobs | CF Queue retries automatically up to the retry limit, then parks in DLQ for inspection. No silent failures. |
+All users must sign in with `@dlsu.edu.ph` Google accounts. The backend rejects any other domain with `403 DOMAIN_RESTRICTED`.
 
+| Role    | Token                         | Access                    |
+| :------ | :---------------------------- | :------------------------ |
+| `guest` | None                          | Public endpoints only     |
+| `user`  | Firebase JWT (`@dlsu.edu.ph`) | Protected user endpoints  |
+| `admin` | JWT + `admin: true` claim     | Admin mutation endpoints  |
+
+---
+
+## Resilience at Scale
+
+**Firebase Auth (~50 QPS limit):** JWTs are cached in Cloudflare KV with a 3,600s TTL — >90% of requests skip Firebase entirely.
+
+**Email (200–500ms send latency):** All email jobs are pushed to a Cloudflare Queue. The HTTP response returns immediately (`202 Accepted`); the consumer worker sends via **Amazon SES** (primary). If SES returns a non-retryable error **and** `RESEND_API_KEY` is set, the job is retried via **Resend** before landing in the DLQ. If `RESEND_API_KEY` is not set, fallback is skipped and the job goes straight to the DLQ after SES exhausts its retries.
+
+> **Why SES?** SES supports 14 emails/second by default (vs. Resend's 10/s), has a native suppression list, and is significantly cheaper at high volumes ($0.10 per 1k). Resend is an **optional** fallback — configure it for a deliverability dashboard and better incident visibility, or omit `RESEND_API_KEY` to run SES-only.
+
+---
+
+## Deployment
+
+Leapify targets **Cloudflare Workers** (standalone) or **Cloudflare Pages Functions** (colocated). Configure `wrangler.toml` with D1, KV, Queue bindings and Worker secrets.
+
+**Standalone:**
+
+```sh
+npm run build && wrangler deploy
+```
+
+**npm module (inside your own repo):**
+
+```sh
+wrangler deploy   # your consumer worker that imports leapify
+```
+
+See [wrangler.toml.example](./wrangler.toml.example) and [.dev.vars.example](./.dev.vars.example) for the full config shape.

@@ -1,6 +1,10 @@
 # Frontend Integration Guide
 
-This guide walks through integrating `leapify` into a frontend project (Next.js, SvelteKit, Nuxt, etc.) as a fullstack npm package. One `npm install leapify` covers both the server-side handler and a browser-safe typed API client.
+This guide walks through integrating `leapify` into a frontend project (Next.js, SvelteKit, Nuxt, etc.).
+
+`leapify` is a **server-only npm module** — one install gives you a Cloudflare Worker backend that your frontend calls via `leapify/client`. All secrets (Firebase, Contentful, Amazon SES, CF bindings) live in `.env` / `wrangler.toml` and are never exposed to the browser. Transactional email uses **Amazon SES** as the primary provider; **Resend** is an optional fallback that activates only when `RESEND_API_KEY` is set.
+
+> **API access:** All `/api/*` endpoints are CORS-restricted to `allowedOrigins` — only your own site's origin can call them. `GET /health` is the only endpoint open to external origins (uptime monitoring).
 
 ---
 
@@ -24,6 +28,7 @@ This guide walks through integrating `leapify` into a frontend project (Next.js,
 ## 1. Prerequisites
 
 - Firebase project configured (Google Sign-In enabled)
+- Contentful space configured with the Leapify content model (events, FAQs, site config)
 - Backend Worker deployed (e.g., `https://api.leap.yourdomain.com`)
 - All users must sign in with `@dlsu.edu.ph` Google accounts — the backend enforces this and returns `403 DOMAIN_RESTRICTED` for any other email domain
 
@@ -39,28 +44,28 @@ This gives you two import paths:
 
 | Import path | Use in |
 |---|---|
-| `leapify` | Server-only: Worker handler, Drizzle schema, CF types |
+| `leapify` | **Server-only**: Worker handler, Drizzle schema, CF bindings |
 | `leapify/client` | Browser + server: typed fetch client, shared types, Firebase helper |
 | `leapify/types` | Type-only imports for components |
+
+> Do **not** import from `leapify` (server) in browser/client components — it bundles server secrets and CF bindings.
 
 ---
 
 ## 3. Environment Variables
 
-Add to `.env.local` (or your framework's env config):
+Frontend `.env.local` only needs public values — all secret keys (Firebase admin, Contentful, Amazon SES, CF bindings) live in the Worker's `.env` / `wrangler.toml` secrets:
 
 ```env
-# Leapify API
+# Public — safe to expose to browser
 NEXT_PUBLIC_API_BASE_URL=https://api.leap.yourdomain.com
-
-# Firebase (public — safe to expose to browser)
 NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 ```
 
-> `FIREBASE_PROJECT_ID` must match the `FIREBASE_PROJECT_ID` Worker secret — it is used to verify JWT issuer.
+> `FIREBASE_PROJECT_ID` must match the Worker secret of the same name — used to verify JWT issuer.
 
 ---
 
@@ -159,7 +164,7 @@ const events = await api.getEvents();
 // → LeapEvent[]
 ```
 
-The backend sets a 7-day `Cache-Control` header. In Next.js, the response is automatically cached. To revalidate on demand, call `revalidateTag` or `revalidatePath` from a Server Action.
+Event content (descriptions, images, metadata) is sourced from **Contentful** and cached at two layers: Cloudflare CDN edge (`Cache-Control: public, max-age=604800`) and Cloudflare KV. In Next.js, the response is automatically cached. To revalidate on demand, call `revalidateTag` or `revalidatePath` from a Server Action.
 
 ### Event Detail
 
@@ -375,37 +380,33 @@ function RegisterButton({
 
 ---
 
-## 12. Mounting the Server Handler (Optional)
+## 12. Mounting the Server Handler
 
-If your frontend is deployed on **Cloudflare Pages** (with access to D1/KV bindings), you can mount `createLeapify` directly inside a Pages Function instead of running a separate Worker:
+Leapify is a **Cloudflare-first** backend. The recommended deployment is a standalone Cloudflare Worker with all D1, KV, Queue, and secret bindings configured in `wrangler.toml`.
+
+For **Cloudflare Pages** (colocated with your frontend):
 
 ```ts
-// functions/api/[[path]].ts  (Cloudflare Pages)
+// functions/api/[[path]].ts
 import { createLeapify } from "leapify";
 
-const handler = createLeapify({
+export const onRequest = createLeapify({
   allowedOrigins: ["https://yourdomain.com"],
-});
-
-export const onRequest = handler.fetch;
+}).fetch;
 ```
 
-For **Next.js App Router** (Vercel / Node.js), mount the Hono app in a catch-all API route:
+For **Next.js App Router** (Vercel / Node.js):
 
 ```ts
 // app/api/[[...route]]/route.ts
 import { createLeapify } from "leapify";
 import { handle } from "hono/vercel";
 
-const handler = createLeapify({
-  allowedOrigins: ["https://yourdomain.com"],
-});
-
-const honoApp = /* reconstruct app with env adapter */;
-export const GET = handle(honoApp);
-export const POST = handle(honoApp);
-export const PATCH = handle(honoApp);
-export const DELETE = handle(honoApp);
+const app = createLeapify({ allowedOrigins: ["https://yourdomain.com"] });
+export const GET = handle(app);
+export const POST = handle(app);
+export const PATCH = handle(app);
+export const DELETE = handle(app);
 ```
 
-> **Note:** Cloudflare-specific bindings (D1, KV, Queues) are only available on CF Workers and Pages. For Vercel/Node.js deployments, you will need to adapt the bindings (e.g., use Drizzle with Turso/libsql instead of D1). The server entry point is intentionally kept separate from `leapify/client` to avoid bundling server dependencies into the browser.
+> **Note:** Cloudflare bindings (D1, KV, Queues) are only available on CF Workers/Pages. Vercel/Node.js deployments must adapt storage (e.g., Drizzle + Turso instead of D1). The `leapify` server import is intentionally separate from `leapify/client` to prevent server-side secrets from leaking into the browser bundle.

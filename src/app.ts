@@ -38,6 +38,27 @@ export function createApp(options: LeapifyAppOptions = {}): Hono<LeapifyEnv> {
   app.use("*", logger());
   app.use("*", createCorsMiddleware(options.allowedOrigins ?? ["*"]));
 
+  // Warn once at startup if SES credentials are missing
+  let emailWarnLogged = false
+  app.use("*", async (c, next) => {
+    if (!emailWarnLogged) {
+      emailWarnLogged = true
+      const hasSes =
+        c.env.SES_REGION && c.env.SES_ACCESS_KEY_ID && c.env.SES_SECRET_ACCESS_KEY
+      if (!hasSes) {
+        console.warn(
+          "[leapify] SES credentials not configured (SES_REGION / SES_ACCESS_KEY_ID / " +
+          "SES_SECRET_ACCESS_KEY). Transactional email is DISABLED until secrets are set."
+        )
+      } else if (!c.env.RESEND_API_KEY) {
+        console.info(
+          "[leapify] RESEND_API_KEY not set — email will use SES only (no fallback provider)."
+        )
+      }
+    }
+    return next()
+  })
+
   // Maintenance mode check
   app.use("*", async (c, next) => {
     // Skip for health and internal routes so operators can still access them

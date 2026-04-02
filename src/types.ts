@@ -10,6 +10,12 @@ export interface LeapifyBindings {
   KV: KVNamespace
   FILES?: R2Bucket
   EMAIL_QUEUE?: Queue
+  /**
+   * Standalone mode only: comma-separated list of allowed origins.
+   * Example: "https://mysite.com,https://www.mysite.com"
+   * In npm module mode, pass allowedOrigins to createLeapify() instead.
+   */
+  ALLOWED_ORIGINS?: string
 
   // Secrets (set via `wrangler secret put`)
   FIREBASE_PROJECT_ID: string
@@ -19,6 +25,12 @@ export interface LeapifyBindings {
   CONTENTFUL_SPACE_ID?: string
   CONTENTFUL_ACCESS_TOKEN?: string
   CONTENTFUL_ENVIRONMENT?: string
+  // Email — Amazon SES (primary)
+  SES_REGION: string
+  SES_ACCESS_KEY_ID: string
+  SES_SECRET_ACCESS_KEY: string
+  SES_FROM_ADDRESS?: string
+  // Email — Resend (optional fallback; only activated when set)
   RESEND_API_KEY?: string
   RESEND_FROM_ADDRESS?: string
   INTERNAL_API_SECRET: string

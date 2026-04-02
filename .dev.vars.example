@@ -23,7 +23,16 @@ CONTENTFUL_SPACE_ID="your-space-id"
 CONTENTFUL_ACCESS_TOKEN="your-content-delivery-api-token"
 CONTENTFUL_ENVIRONMENT="master"
 
-# Resend (Transactional Email) 
+# Amazon SES (Primary Transactional Email)
+# IAM user needs ses:SendEmail + ses:SendRawEmail permissions.
+# Create SMTP credentials in SES Console → SMTP Settings → Create credentials.
+SES_REGION="us-east-1"
+SES_ACCESS_KEY_ID="AKIA..."
+SES_SECRET_ACCESS_KEY="your-ses-secret"
+SES_FROM_ADDRESS="noreply@yourdomain.com"
+
+# Resend (Fallback Transactional Email)
+# Used when SES returns a non-retryable error.
 RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxx"
 RESEND_FROM_ADDRESS="noreply@yourdomain.com"
 

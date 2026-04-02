@@ -3,7 +3,8 @@ import type { LeapifyBindings } from '../types'
 import type { LeapifyJob } from './jobs'
 import { createDb } from '../db'
 import { events } from '../db/schema/events'
-import { ResendService, buildReminderEmail } from '../services/resend'
+import { createEmailRouter, type EmailRouter } from '../services/email'
+import { buildReminderEmail } from '../services/resend'
 import { GFormsService } from '../services/gforms'
 
 /**
@@ -18,14 +19,12 @@ import { GFormsService } from '../services/gforms'
 export function createQueueHandler(env: LeapifyBindings) {
   return async (batch: MessageBatch<LeapifyJob>): Promise<void> => {
     const db = createDb(env.DB)
-    const resend = env.RESEND_API_KEY
-      ? new ResendService(env.RESEND_API_KEY, env.RESEND_FROM_ADDRESS ?? 'noreply@leap.dlsu.edu.ph')
-      : null
+    const email = createEmailRouter(env)
     const gforms = new GFormsService(env.GFORMS_SERVICE_ACCOUNT_JSON)
 
     for (const message of batch.messages) {
       try {
-        await processJob(message.body, { db, resend, gforms })
+        await processJob(message.body, { db, email, gforms })
         message.ack()
       } catch (err) {
         console.error(`[Queue] Failed to process job ${message.body.type}:`, err)
@@ -39,21 +38,22 @@ async function processJob(
   job: LeapifyJob,
   services: {
     db: ReturnType<typeof createDb>
-    resend: ResendService | null
+    email: EmailRouter | null
     gforms: GFormsService
   },
 ): Promise<void> {
-  const { db, resend, gforms } = services
+  const { db, email, gforms } = services
 
   switch (job.type) {
     case 'send_email': {
-      if (!resend) throw new Error('Resend not configured')
-      await resend.sendEmail(job.payload)
+      if (!email) throw new Error('Email provider not configured (SES credentials missing)')
+      const result = await email.sendEmail(job.payload)
+      console.log(`[Queue] send_email dispatched via ${result.provider} (id=${result.id})`)
       break
     }
 
     case 'send_reminder_email': {
-      if (!resend) throw new Error('Resend not configured')
+      if (!email) throw new Error('Email provider not configured (SES credentials missing)')
 
       const event = await db.query.events.findFirst({
         where: eq(events.id, job.payload.eventId),
@@ -70,11 +70,19 @@ async function processJob(
 
       const html = buildReminderEmail(event)
 
-      // Batch send (Resend supports up to 100 per batch)
+      // Send in batches of 100; per-message fallback applies inside sendEmail()
       const BATCH_SIZE = 100
       for (let i = 0; i < emails.length; i += BATCH_SIZE) {
-        const batch = emails.slice(i, i + BATCH_SIZE).map((to) => ({ to, subject, html }))
-        await resend.sendBatch(batch)
+        const chunk = emails.slice(i, i + BATCH_SIZE).map((to) => ({ to, subject, html }))
+        const results = await email.sendBatch(chunk)
+
+        const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        if (failures.length > 0) {
+          console.error(
+            `[Queue] send_reminder_email: ${failures.length}/${chunk.length} messages failed in batch ${i / BATCH_SIZE + 1}`,
+            failures.map((f) => f.reason),
+          )
+        }
       }
 
       // Mark reminder as sent

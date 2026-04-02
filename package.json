@@ -1,7 +1,7 @@
 {
   "name": "leapify",
   "version": "0.1.0",
-  "description": "Fullstack npm module for DLSU CSO LEAP event websites — server handler and browser-safe typed API client in one package",
+  "description": "DLSU CSO LEAP backend — run as a standalone Cloudflare Worker or install as an npm module",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -11,6 +11,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./worker": {
+      "import": "./dist/worker.js"
     },
     "./client": {
       "types": "./dist/client/index.d.ts",
@@ -35,6 +38,55 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
+  },
+  "cloudflare": {
+    "bindings": {
+      "ALLOWED_ORIGINS": {
+        "description": "Comma-separated allowed origins (e.g., https://yoursite.com). Leave empty to block all cross-origin requests."
+      },
+      "FIREBASE_PROJECT_ID": {
+        "description": "Firebase Project ID for authentication."
+      },
+      "FIREBASE_WEB_API_KEY": {
+        "description": "Firebase Web API Key."
+      },
+      "GFORMS_SERVICE_ACCOUNT_JSON": {
+        "description": "Google Forms Service Account JSON."
+      },
+      "GFORMS_WEBHOOK_SECRET": {
+        "description": "Secret for Google Forms Webhook."
+      },
+      "CONTENTFUL_SPACE_ID": {
+        "description": "Contentful Space ID."
+      },
+      "CONTENTFUL_ACCESS_TOKEN": {
+        "description": "Contentful Access Token."
+      },
+      "CONTENTFUL_ENVIRONMENT": {
+        "description": "Contentful Environment (usually `master`)."
+      },
+      "SES_REGION": {
+        "description": "Amazon SES Region (e.g., `us-east-1`)."
+      },
+      "SES_ACCESS_KEY_ID": {
+        "description": "Amazon SES Access Key ID."
+      },
+      "SES_SECRET_ACCESS_KEY": {
+        "description": "Amazon SES Secret Access Key."
+      },
+      "SES_FROM_ADDRESS": {
+        "description": "Verified from address for Amazon SES."
+      },
+      "RESEND_API_KEY": {
+        "description": "Resend API Key for fallback email (Optional)."
+      },
+      "RESEND_FROM_ADDRESS": {
+        "description": "Resend From Address (Optional)."
+      },
+      "INTERNAL_API_SECRET": {
+        "description": "Secret key for internal API routes."
+      }
+    }
   },
   "peerDependencies": {
     "@cloudflare/workers-types": "^4.0.0",
