@@ -23,8 +23,8 @@
 if (typeof document !== "undefined") {
   throw new Error(
     "[leapify] This module is server-only (Cloudflare Workers / server runtimes). " +
-    "Do not import it in browser or client-component code. " +
-    "Use 'leapify/client' for browser-safe typed API utilities.",
+      "Do not import it in browser or client-component code. " +
+      "Use 'leapify/client' for browser-safe typed API utilities.",
   );
 }
 
@@ -50,6 +50,7 @@ export interface LeapifyOptions extends LeapifyAppOptions {}
  */
 export function createLeapify(options: LeapifyOptions = {}) {
   const app = createApp(options);
+  let loggedEmailConfig = false;
 
   return {
     /**
@@ -61,6 +62,22 @@ export function createLeapify(options: LeapifyOptions = {}) {
       env: LeapifyBindings,
       ctx: ExecutionContext,
     ): Promise<Response> {
+      if (!loggedEmailConfig) {
+        loggedEmailConfig = true;
+        const hasSes = !!(
+          env.SES_REGION &&
+          env.SES_ACCESS_KEY_ID &&
+          env.SES_SECRET_ACCESS_KEY
+        );
+        const hasResend = !!env.RESEND_API_KEY;
+
+        if (!hasSes && !hasResend) {
+          console.warn(
+            "[leapify] Email functionality is DISABLED (no SES or Resend credentials).",
+          );
+        }
+      }
+
       return Promise.resolve(app.fetch(request, env, ctx));
     },
 

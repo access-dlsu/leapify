@@ -21,6 +21,16 @@ export async function reminderEmails(env: LeapifyBindings): Promise<void> {
     return;
   }
 
+  const hasSes = !!(env.SES_REGION && env.SES_ACCESS_KEY_ID && env.SES_SECRET_ACCESS_KEY);
+  const hasResend = !!env.RESEND_API_KEY;
+
+  if (!hasSes && !hasResend) {
+    console.warn(
+      "[reminder-emails] No email providers configured. Skipping reminders.",
+    );
+    return;
+  }
+
   const db = createDb(env.DB);
   const now = Math.floor(Date.now() / 1000);
 

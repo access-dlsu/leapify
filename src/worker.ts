@@ -44,23 +44,32 @@ function parseAllowedOrigins(raw: string | undefined): string[] {
     .filter(Boolean)
 }
 
+let app: ReturnType<typeof createLeapify> | null = null;
+
 /**
- * Build a fresh Leapify app per request so ALLOWED_ORIGINS is always
- * read from the current env (supports preview / production env splits).
+ * Singleton Leapify app instance.
+ * Ensures that startup logic (like email warnings) only runs once per Worker lifecycle.
  */
+function getApp(env: LeapifyBindings): NonNullable<typeof app> {
+  if (!app) {
+    const allowedOrigins = parseAllowedOrigins(env.ALLOWED_ORIGINS);
+    app = createLeapify({ allowedOrigins });
+  }
+  return app;
+}
+
 const leapify = {
   fetch(request: Request, env: LeapifyBindings, ctx: ExecutionContext): Promise<Response> {
-    const allowedOrigins = parseAllowedOrigins(env.ALLOWED_ORIGINS)
-    return createLeapify({ allowedOrigins }).fetch(request, env, ctx)
+    return getApp(env).fetch(request, env, ctx);
   },
 
   async scheduled(event: ScheduledEvent, env: LeapifyBindings, ctx: ExecutionContext): Promise<void> {
-    return createLeapify().scheduled(event, env, ctx)
+    return getApp(env).scheduled(event, env, ctx);
   },
 
   async queue(batch: MessageBatch<LeapifyJob>, env: LeapifyBindings): Promise<void> {
-    return createLeapify().queue(batch, env)
+    return getApp(env).queue(batch, env);
   },
-}
+};
 
-export default leapify
+export default leapify;

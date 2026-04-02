@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { logger } from "hono/logger";
 import type { LeapifyEnv } from "./types";
 import { errorHandler } from "./lib/middleware/error-handler";
 import { createCorsMiddleware } from "./lib/middleware/cors";
@@ -16,7 +15,7 @@ export interface LeapifyAppOptions {
   /**
    * Public HTTPS URL of your Cloudflare Worker.
    * Required for Google Forms Watch push notifications to work.
-   * Google will POST to `{gformsWebhookUrl}/internal/gforms-webhook` on each new submission.
+   * Google will POST to {gformsWebhookUrl}/internal/gforms-webhook on each new submission.
    *
    * @example 'https://leap.yourdomain.com'
    */
@@ -34,30 +33,9 @@ export function createApp(options: LeapifyAppOptions = {}): Hono<LeapifyEnv> {
       return next();
     });
   }
+  
   // Global middleware
-  app.use("*", logger());
   app.use("*", createCorsMiddleware(options.allowedOrigins ?? ["*"]));
-
-  // Warn once at startup if SES credentials are missing
-  let emailWarnLogged = false
-  app.use("*", async (c, next) => {
-    if (!emailWarnLogged) {
-      emailWarnLogged = true
-      const hasSes =
-        c.env.SES_REGION && c.env.SES_ACCESS_KEY_ID && c.env.SES_SECRET_ACCESS_KEY
-      if (!hasSes) {
-        console.warn(
-          "[leapify] SES credentials not configured (SES_REGION / SES_ACCESS_KEY_ID / " +
-          "SES_SECRET_ACCESS_KEY). Transactional email is DISABLED until secrets are set."
-        )
-      } else if (!c.env.RESEND_API_KEY) {
-        console.info(
-          "[leapify] RESEND_API_KEY not set — email will use SES only (no fallback provider)."
-        )
-      }
-    }
-    return next()
-  })
 
   // Maintenance mode check
   app.use("*", async (c, next) => {

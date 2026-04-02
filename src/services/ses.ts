@@ -30,11 +30,12 @@ export class SesService {
     accessKeyId: string
     secretAccessKey: string
     fromAddress: string
+    fromName?: string | undefined
   }) {
     this.region = opts.region
     this.accessKeyId = opts.accessKeyId
     this.secretAccessKey = opts.secretAccessKey
-    this.defaultFrom = opts.fromAddress
+    this.defaultFrom = formatFrom(opts.fromName, opts.fromAddress)
   }
 
   /**
@@ -210,4 +211,12 @@ function bufToHex(buf: ArrayBuffer): string {
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
+}
+
+/**
+ * Format email 'From' field as "Name <email@domain.com>" if name provided.
+ */
+function formatFrom(name: string | undefined, email: string): string {
+  if (!name) return email
+  return `${name} <${email}>`
 }

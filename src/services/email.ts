@@ -26,28 +26,32 @@ export interface EmailPayload {
 }
 
 export interface EmailRouterConfig {
-  /** SES credentials — required */
-  ses: {
+  /** SES credentials — optional */
+  ses?: {
     region: string
     accessKeyId: string
     secretAccessKey: string
     fromAddress: string
-  }
-  /** Resend credentials — optional; fallback only activates when present */
+  } | undefined
+  /** Resend credentials — optional */
   resend?: {
     apiKey: string
     fromAddress: string
-  }
+  } | undefined
+  /** Optional display name for 'From' header (e.g. "Leapify") */
+  fromName?: string | undefined
 }
 
 export class EmailRouter {
-  private readonly ses: SesService
+  private readonly ses: SesService | null
   private readonly resend: ResendService | null
 
   constructor(config: EmailRouterConfig) {
-    this.ses = new SesService(config.ses)
+    this.ses = config.ses
+      ? new SesService({ ...config.ses, fromName: config.fromName })
+      : null
     this.resend = config.resend
-      ? new ResendService(config.resend.apiKey, config.resend.fromAddress)
+      ? new ResendService(config.resend.apiKey, formatFrom(config.fromName, config.resend.fromAddress))
       : null
   }
 
@@ -56,23 +60,36 @@ export class EmailRouter {
    * Tries SES first (with retries), then Resend if configured and SES fails permanently.
    */
   async sendEmail(payload: EmailPayload): Promise<{ provider: 'ses' | 'resend'; id: string }> {
-    try {
-      const result = await withRetry(() => this.ses.sendEmail(payload), {
-        maxAttempts: SES_MAX_ATTEMPTS,
-        shouldRetry: (err) => !(err instanceof SesError && err.isNonRetryable),
-      })
-      return { provider: 'ses', id: result.messageId }
-    } catch (sesErr) {
-      const isPermanent = sesErr instanceof SesError && sesErr.isNonRetryable
+    // 1. Try SES if configured
+    if (this.ses) {
+      try {
+        const result = await withRetry(() => this.ses!.sendEmail(payload), {
+          maxAttempts: SES_MAX_ATTEMPTS,
+          shouldRetry: (err) => !(err instanceof SesError && err.isNonRetryable),
+        })
+        return { provider: 'ses', id: result.messageId }
+      } catch (sesErr) {
+        const isPermanent = sesErr instanceof SesError && sesErr.isNonRetryable
 
-      if (isPermanent && this.resend) {
-        console.warn('[EmailRouter] SES failed permanently — falling back to Resend', sesErr)
-        const result = await this.resend.sendEmail(toResendOptions(payload))
-        return { provider: 'resend', id: result.id }
+        // Fallback to Resend if SES has permanent failure
+        if (isPermanent && this.resend) {
+          console.warn('[EmailRouter] SES failed permanently — falling back to Resend', sesErr)
+          const result = await this.resend.sendEmail(toResendOptions(payload))
+          return { provider: 'resend', id: result.id }
+        }
+
+        throw sesErr
       }
-
-      throw sesErr
     }
+
+    // 2. Try Resend if SES is not configured but Resend is
+    if (this.resend) {
+      const result = await this.resend.sendEmail(toResendOptions(payload))
+      return { provider: 'resend', id: result.id }
+    }
+
+    // 3. No providers configured
+    throw new Error('No email providers (SES or Resend) are configured.')
   }
 
   /**
@@ -94,39 +111,53 @@ export class EmailRouter {
 // ---------------------------------------------------------------------------
 
 export type EmailEnv = {
-  SES_REGION: string
-  SES_ACCESS_KEY_ID: string
-  SES_SECRET_ACCESS_KEY: string
+  SES_REGION?: string
+  SES_ACCESS_KEY_ID?: string
+  SES_SECRET_ACCESS_KEY?: string
   SES_FROM_ADDRESS?: string
+  EMAIL_FROM_NAME?: string
+  ALLOWED_ORIGINS?: string
   RESEND_API_KEY?: string
   RESEND_FROM_ADDRESS?: string
 }
 
 /**
  * Build an EmailRouter from Cloudflare Worker bindings.
- * Returns null if SES credentials are not configured.
+ * Returns null if no email providers are configured.
  */
 export function createEmailRouter(env: EmailEnv): EmailRouter | null {
-  if (!env.SES_REGION || !env.SES_ACCESS_KEY_ID || !env.SES_SECRET_ACCESS_KEY) {
+  const hasSes = env.SES_REGION && env.SES_ACCESS_KEY_ID && env.SES_SECRET_ACCESS_KEY
+  const hasResend = !!env.RESEND_API_KEY
+
+  if (!hasSes && !hasResend) {
     return null
   }
 
   return new EmailRouter({
-    ses: {
-      region: env.SES_REGION,
-      accessKeyId: env.SES_ACCESS_KEY_ID,
-      secretAccessKey: env.SES_SECRET_ACCESS_KEY,
-      fromAddress: env.SES_FROM_ADDRESS ?? 'noreply@leap.dlsu.edu.ph',
-    },
-    ...(env.RESEND_API_KEY
+    ses: hasSes
       ? {
-          resend: {
-            apiKey: env.RESEND_API_KEY,
-            fromAddress: env.RESEND_FROM_ADDRESS ?? 'noreply@leap.dlsu.edu.ph',
-          },
+          region: env.SES_REGION!,
+          accessKeyId: env.SES_ACCESS_KEY_ID!,
+          secretAccessKey: env.SES_SECRET_ACCESS_KEY!,
+          fromAddress: env.SES_FROM_ADDRESS ?? 'noreply@leap.dlsu.edu.ph',
         }
-      : {}),
+      : undefined,
+    fromName: env.EMAIL_FROM_NAME ?? undefined,
+    resend: hasResend
+      ? {
+          apiKey: env.RESEND_API_KEY!,
+          fromAddress: env.RESEND_FROM_ADDRESS ?? 'noreply@leap.dlsu.edu.ph',
+        }
+      : undefined,
   })
+}
+
+/**
+ * Format email 'From' field as "Name <email@domain.com>" if name provided.
+ */
+function formatFrom(name: string | undefined, email: string): string {
+  if (!name) return email
+  return `${name} <${email}>`
 }
 
 // ---------------------------------------------------------------------------

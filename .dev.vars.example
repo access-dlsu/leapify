@@ -1,4 +1,3 @@
-# Leapify — Local Development Secrets
 # Copy this file to .dev.vars and fill in your values.
 # .dev.vars is the Wrangler equivalent of .env for local `wrangler dev`.
 # NEVER commit .dev.vars to git.
@@ -18,25 +17,35 @@ GFORMS_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"...","priva
 # This EXACT value must be provided when calling forms.watches.create.
 GFORMS_WEBHOOK_SECRET="your-32-char-random-hex-secret"
 
-# Contentful CMS 
-CONTENTFUL_SPACE_ID="your-space-id"
-CONTENTFUL_ACCESS_TOKEN="your-content-delivery-api-token"
-CONTENTFUL_ENVIRONMENT="master"
-
-# Amazon SES (Primary Transactional Email)
-# IAM user needs ses:SendEmail + ses:SendRawEmail permissions.
-# Create SMTP credentials in SES Console → SMTP Settings → Create credentials.
-SES_REGION="us-east-1"
-SES_ACCESS_KEY_ID="AKIA..."
-SES_SECRET_ACCESS_KEY="your-ses-secret"
-SES_FROM_ADDRESS="noreply@yourdomain.com"
-
-# Resend (Fallback Transactional Email)
-# Used when SES returns a non-retryable error.
-RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxx"
-RESEND_FROM_ADDRESS="noreply@yourdomain.com"
-
 # Internal Route Security 
 # Used to protect /internal/* routes (e.g. gforms webhook) from spoofing.
 # Generate with: openssl rand -hex 32
 INTERNAL_API_SECRET="your-32-char-random-hex-secret"
+
+# CORS (Standalone Mode Only)
+# Define which frontend origins can access this API.
+# Leave empty to strictly block all cross-origin requests.
+ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,http://localhost:8787"
+
+# Contentful (Headless CMS)
+CONTENTFUL_SPACE_ID="your-space-id"
+CONTENTFUL_ACCESS_TOKEN="your-content-delivery-api-token"
+CONTENTFUL_ENVIRONMENT="master"
+
+# Email Configuration
+# At least ONE of SES or Resend is required for email reminders.
+# If both are missing, all email functionality is automatically disabled.
+EMAIL_FROM_NAME="Leapify"
+
+# Amazon SES (Primary Transactional Email)
+# Requires a verified Domain or Email Identity + IAM user credentials.
+SES_REGION="ap-southeast-1"
+SES_ACCESS_KEY_ID="AKIA..."
+SES_SECRET_ACCESS_KEY="your-ses-secret"
+SES_FROM_ADDRESS="noreply@yourdomain.com"
+
+# Resend (Primary or Fallback Email)
+# - Acts as FALLBACK if SES is configured but fails.
+# - Acts as PRIMARY if SES credentials are all missing.
+RESEND_API_KEY="re_xxxxxxxxxxxxxxxxxxxx"
+RESEND_FROM_ADDRESS="noreply@yourdomain.com"
