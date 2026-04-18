@@ -1,13 +1,13 @@
 import { createMiddleware } from "hono/factory";
 import { eq } from "drizzle-orm";
-import { verifyFirebaseToken, fetchGoogleCerts } from "./jwt";
+import { verifyFirebaseToken, fetchGoogleCerts, type GoogleCerts } from "./jwt";
 import { domainRestricted, unauthorized, forbidden } from "../lib/errors";
 import { createDb } from "../db";
 import { users } from "../db/schema/users";
 import type { LeapifyBindings } from "../types";
 import type { LeapifyUser } from "./types";
 
-const CERTS_KV_KEY = "auth:google-certs";
+const CERTS_KV_KEY = "auth:google-jwks"; // keyed separately from the old PEM cert cache
 const USER_KV_PREFIX = "auth:user:";
 const DLSU_DOMAIN = "@dlsu.edu.ph";
 const USER_KV_TTL = 3600; // 1 hour
@@ -59,7 +59,7 @@ export const authMiddleware = createMiddleware<{ Bindings: LeapifyBindings }>(
 
     // Step 3: verify JWT using Google's public certs
     const getCerts = async () => {
-      const cached = await KV.get<Record<string, string>>(CERTS_KV_KEY, "json");
+      const cached = await KV.get<GoogleCerts>(CERTS_KV_KEY, "json");
       if (cached) return cached;
 
       const { certs, ttl } = await fetchGoogleCerts();

@@ -15,8 +15,14 @@ export function createCorsMiddleware(allowedOrigins: string[]): MiddlewareHandle
   return async (c, next) => {
     const origin = c.req.header('origin')
     
-    // Strict ADR-001 Check: If an Origin is present, it MUST be allowed
-    if (origin && !allowedOrigins.includes('*') && !allowedOrigins.includes(origin)) {
+    // Strict ADR-001 Check: If an Origin is present, it MUST be allowed.
+    // However, /health is completely exempt so uptime monitors can ping it globally.
+    if (
+      c.req.path !== '/health' && 
+      origin && 
+      !allowedOrigins.includes('*') && 
+      !allowedOrigins.includes(origin)
+    ) {
       return c.json(
         { error: { code: 'DOMAIN_RESTRICTED', message: `Origin ${origin} is not allowed` } },
         403

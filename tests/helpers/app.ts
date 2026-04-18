@@ -62,7 +62,7 @@ export function createMockQueue() {
 // Returns both the Hono app instance AND the env bindings so individual tests
 // can pre-seed the KV namespace before firing requests.
 //
-export function createTestApp() {
+export function createTestApp(options?: { allowedOrigins?: string[] }) {
   const kv = createMockKV();
 
   const env = {
@@ -75,7 +75,7 @@ export function createTestApp() {
     INTERNAL_API_SECRET: "secret",
   };
 
-  const app = createApp({ allowedOrigins: ["*"] });
+  const app = createApp({ allowedOrigins: options?.allowedOrigins ?? ["*"] });
 
   return { app, env, kv };
 }
