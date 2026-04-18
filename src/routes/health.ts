@@ -32,3 +32,32 @@ healthRoute.get('/', (c) => {
     },
   })
 })
+
+/**
+ * POST /health/queue-burst
+ * Internal load testing endpoint that blasts 100 mock items into the queue.
+ */
+healthRoute.post('/queue-burst', async (c) => {
+  if (!c.env.leapify_email_queue) {
+    return c.json({ error: "Queue binding missing" }, 400);
+  }
+
+  // Cloudflare Queue sendBatch takes a maximum of 100 messages at a time.
+  // We use the 'audit_log' job type so it mocks everything instantly and 
+  // avoids touching the physical SES email limits entirely!
+  const batch = Array.from({ length: 100 }, (_, i) => ({
+    body: {
+      type: "audit_log",
+      payload: {
+        action: "queue_load_test",
+        userId: "system",
+        meta: { index: i, time: Date.now() }
+      }
+    }
+  }));
+
+  // Typecast safely for Hono CF bindings
+  await (c.env.leapify_email_queue as any).sendBatch(batch);
+
+  return c.json({ status: "queued", count: 100 });
+});

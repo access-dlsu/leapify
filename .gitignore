@@ -152,4 +152,9 @@ package-lock.json
 
 # Wrangler
 .wrangler/
-wrangler.toml
+wrangler.jsonc
+worker-configuration.d.ts
+
+# Tests
+load-tests/
+test-client/

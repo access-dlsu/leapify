@@ -53,20 +53,27 @@ usersRoute.post("/me/bookmarks/:eventId", authMiddleware, async (c) => {
   });
   if (!event) throw notFound("Event");
 
-  // Toggle: try insert, if exists then delete
-  const existing = await db.query.bookmarks.findFirst({
-    // Must match BOTH userId and eventId — matching userId alone would
-    // accidentally delete a bookmark for a different event.
-    where: and(eq(bookmarks.userId, user.dbId), eq(bookmarks.eventId, eventId)),
-  });
+  // Try an atomic insert that silently skips if the unique constraint is hit.
+  // This physically completely prevents SQLite UNIQUE index crash errors on race conditions.
+  const inserted = await db
+    .insert(bookmarks)
+    .values({ userId: user.dbId, eventId })
+    .onConflictDoNothing({ target: [bookmarks.userId, bookmarks.eventId] })
+    .returning();
 
-  if (existing) {
-    await db.delete(bookmarks).where(eq(bookmarks.id, existing.id));
-    return c.json({ data: { bookmarked: false } });
+  // If the array has elements, the record didn't exist and we just successfully added it.
+  if (inserted.length > 0) {
+    return c.json({ data: { bookmarked: true } }, 201);
   }
 
-  await db.insert(bookmarks).values({ userId: user.dbId, eventId });
-  return c.json({ data: { bookmarked: true } }, 201);
+  // If the array is empty, the bookmark definitively already existed! 
+  // To fulfill the structural 'toggle' pattern, we execute a targeted delete.
+  // Even if 500 workers hit this delete simultaneously, SQLite handles it gracefully.
+  await db
+    .delete(bookmarks)
+    .where(and(eq(bookmarks.userId, user.dbId), eq(bookmarks.eventId, eventId)));
+
+  return c.json({ data: { bookmarked: false } }, 200);
 });
 
 // DELETE /users/me/bookmarks/:eventId
