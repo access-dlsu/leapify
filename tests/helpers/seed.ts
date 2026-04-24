@@ -1,10 +1,15 @@
+import { randomUUID } from 'node:crypto'
 import { events } from '../../src/db/schema/events'
 import { users } from '../../src/db/schema/users'
 import { faqs } from '../../src/db/schema/faqs'
 
+function shortId(len = 8) {
+  return randomUUID().replace(/-/g, '').slice(0, len)
+}
+
 export async function seedEvent(db: any, overrides: Record<string, any> = {}) {
   const [event] = await db.insert(events).values({
-    slug: 'test-event-' + Math.random().toString(36).slice(2, 7),
+    slug: `test-event-${shortId()}`,
     categoryName: 'Test Category',
     categoryPath: 'test',
     title: 'Test Event',
@@ -19,8 +24,8 @@ export async function seedEvent(db: any, overrides: Record<string, any> = {}) {
 
 export async function seedUser(db: any, overrides: Record<string, any> = {}) {
   const [user] = await db.insert(users).values({
-    firebaseUid: 'firebase-' + Math.random().toString(36).slice(2, 8),
-    email: 'user-' + Math.random().toString(36).slice(2, 6) + '@dlsu.edu.ph',
+    firebaseUid: `firebase-${shortId()}`,
+    email: `user-${shortId(6)}@dlsu.edu.ph`,
     name: 'Test User',
     role: 'student',
     ...overrides,
@@ -30,7 +35,7 @@ export async function seedUser(db: any, overrides: Record<string, any> = {}) {
 
 export async function seedFaq(db: any, overrides: Record<string, any> = {}) {
   const [faq] = await db.insert(faqs).values({
-    question: 'Q ' + Math.random().toString(36).slice(2, 6),
+    question: `Q ${shortId(6)}`,
     answer: 'A',
     isActive: true,
     ...overrides,

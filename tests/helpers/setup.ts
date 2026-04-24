@@ -31,7 +31,7 @@ function buildDb() {
 
   let rawSql = fs.readFileSync(path.join(migrationsPath, files[0]!), 'utf-8')
   // Strip drizzle-kit statement-breakpoint comments
-  rawSql = rawSql.replace(/-->.*?(\n|$)/g, '\n')
+  rawSql = rawSql.replace(/--!?>.*?(\n|$)/g, '\n')
   // SQLite does not accept bare `true`/`false` — replace with 1/0
   rawSql = rawSql.replace(/DEFAULT\s+false/gi, 'DEFAULT 0')
   rawSql = rawSql.replace(/DEFAULT\s+true/gi, 'DEFAULT 1')

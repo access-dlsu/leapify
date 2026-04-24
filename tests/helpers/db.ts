@@ -27,7 +27,7 @@ export function createMemoryDb() {
   let rawSql = fs.readFileSync(path.join(migrationsPath, files[0]!), 'utf-8')
 
   // Fix 1: Remove drizzle-kit statement-breakpoint markers
-  rawSql = rawSql.replace(/-->.*?(\n|$)/g, '\n')
+  rawSql = rawSql.replace(/--!?>.*?(\n|$)/g, '\n')
 
   // Fix 2: Replace bare boolean DEFAULT values that SQLite cannot parse.
   //         e.g.  DEFAULT false  →  DEFAULT 0
