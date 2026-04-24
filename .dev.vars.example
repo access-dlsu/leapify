@@ -17,10 +17,16 @@ GFORMS_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"...","priva
 # This EXACT value must be provided when calling forms.watches.create.
 GFORMS_WEBHOOK_SECRET="your-32-char-random-hex-secret"
 
-# Internal Route Security 
+# Internal Route Security
 # Used to protect /internal/* routes (e.g. gforms webhook) from spoofing.
+# Also used as the HMAC signing key for PoW challenge cookies.
 # Generate with: openssl rand -hex 32
 INTERNAL_API_SECRET="your-32-char-random-hex-secret"
+
+# Proof-of-Work Challenge (Anti-Scraping, Layer 7)
+# Leading zero bits required in SHA-256 hash. Higher = harder challenge.
+# Default: 4 (~100-500ms solve time). Range: 1-8. Leave empty for default.
+POW_DIFFICULTY="4"
 
 # CORS (Standalone Mode Only)
 # Define which frontend origins can access this API.

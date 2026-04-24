@@ -3,7 +3,11 @@ import { defineConfig } from 'tsup'
 export default defineConfig([
   // ── npm module entries (ESM + CJS) ──────────────────────────────────────
   {
-    entry: ['src/index.ts', 'src/client/index.ts'],
+    entry: [
+      'src/index.ts',
+      'src/client/index.ts',
+      'src/lib/middleware/pow-challenge.ts',
+    ],
     format: ['esm', 'cjs'],
     dts: true,
     splitting: true,
@@ -20,7 +24,7 @@ export default defineConfig([
   {
     entry: { worker: 'src/worker.ts' },
     format: ['esm'],
-    dts: false,       // worker.ts is not a public API surface
+    dts: false, // worker.ts is not a public API surface
     splitting: false,
     treeshake: true,
     sourcemap: true,

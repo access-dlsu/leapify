@@ -7,6 +7,7 @@ import { bookmarks } from "../db/schema/bookmarks";
 import { events } from "../db/schema/events";
 import { authMiddleware, optionalAuthMiddleware } from "../auth/middleware";
 import { notFound } from "../lib/errors";
+import { bookmarksRateLimit } from "../lib/middleware/rate-limit";
 
 export const usersRoute = new Hono<LeapifyEnv>();
 
@@ -41,7 +42,7 @@ usersRoute.get("/me/bookmarks", optionalAuthMiddleware, async (c) => {
 });
 
 // POST /users/me/bookmarks/:eventId — toggle
-usersRoute.post("/me/bookmarks/:eventId", authMiddleware, async (c) => {
+usersRoute.post("/me/bookmarks/:eventId", authMiddleware, bookmarksRateLimit, async (c) => {
   const { eventId } = c.req.param();
   const user = c.get("user");
   const db = createDb(c.env.DB);

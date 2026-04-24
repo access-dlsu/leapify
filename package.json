@@ -24,6 +24,11 @@
       "types": "./dist/client/types.d.ts",
       "import": "./dist/client/types.js",
       "require": "./dist/client/types.cjs"
+    },
+    "./middleware/pow-challenge": {
+      "types": "./dist/lib/middleware/pow-challenge.d.ts",
+      "import": "./dist/lib/middleware/pow-challenge.js",
+      "require": "./dist/lib/middleware/pow-challenge.cjs"
     }
   },
   "files": [
@@ -39,7 +44,9 @@
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "pack": "npm run build && npm pack",
+    "pub": "npm run build && npm publish"
   },
   "cloudflare": {
     "bindings": {
@@ -86,13 +93,16 @@
         "description": "Resend From Address (Optional)."
       },
       "INTERNAL_API_SECRET": {
-        "description": "Secret key for internal API routes."
+        "description": "Secret key for internal API routes. Also used as HMAC signing key for PoW challenge cookies."
+      },
+      "POW_DIFFICULTY": {
+        "description": "Proof-of-work challenge difficulty (leading zero bits). Default: 4. Range: 1-8. Higher = harder challenge."
       }
     }
   },
   "peerDependencies": {
     "@cloudflare/workers-types": "^4.0.0",
-    "drizzle-orm": "^0.38.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.0.0"
   },
   "peerDependenciesMeta": {
@@ -103,7 +113,7 @@
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
     "wrangler": "^4.80.0",
-    "zod": "^3.23.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260402.1",
@@ -113,8 +123,11 @@
     "hono": "^4.12.0",
     "prettier": "3.8.3",
     "tsup": "^8.4.0",
-    "typescript": "^5.7.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.2"
+  },
+  "overrides": {
+    "esbuild": "^0.25.0"
   },
   "homepage": "https://github.com/access-dlsu/leapify#readme",
   "bugs": {

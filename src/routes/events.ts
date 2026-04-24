@@ -1,19 +1,24 @@
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { eq, and } from "drizzle-orm";
-import type { LeapifyEnv } from "../types";
-import { createDb } from "../db";
-import { events } from "../db/schema/events";
-import { CacheService } from "../services/cache";
-import { SlotsService } from "../services/slots";
-import { GFormsService } from "../services/gforms";
-import { authMiddleware, adminMiddleware } from "../auth/middleware";
-import { notFound } from "../lib/errors";
+import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
+import { eq, and } from 'drizzle-orm'
+import type { LeapifyEnv } from '../types'
+import { createDb } from '../db'
+import { events } from '../db/schema/events'
+import { CacheService } from '../services/cache'
+import { SlotsService } from '../services/slots'
+import { GFormsService } from '../services/gforms'
+import { authMiddleware, adminMiddleware } from '../auth/middleware'
+import { notFound } from '../lib/errors'
+import {
+  eventsListRateLimit,
+  eventsSlotsRateLimit,
+  adminEventsRateLimit,
+} from '../lib/middleware/rate-limit'
 
-const EVENTS_LIST_KV_KEY = "events:list";
-const EVENTS_ETAG_KV_KEY = "events:etag";
-const EVENTS_LIST_TTL = 300; // 5 min KV cache for list
+const EVENTS_LIST_KV_KEY = 'events:list'
+const EVENTS_ETAG_KV_KEY = 'events:etag'
+const EVENTS_LIST_TTL = 300 // 5 min KV cache for list
 
 const createEventSchema = z.object({
   slug: z.string().min(1).max(100),
@@ -37,40 +42,40 @@ const createEventSchema = z.object({
   registrationOpensAt: z.number().optional(),
   registrationClosesAt: z.number().optional(),
   contentfulEntryId: z.string().optional(),
-  status: z.enum(["draft", "queued", "published"]).default("draft"),
-});
+  status: z.enum(['draft', 'queued', 'published']).default('draft'),
+})
 
-export const eventsRoute = new Hono<LeapifyEnv>();
+export const eventsRoute = new Hono<LeapifyEnv>()
 
 // GET /events — public, ETag + 7-day browser cache
-eventsRoute.get("/", async (c) => {
-  const db = createDb(c.env.DB);
-  const cache = new CacheService(c.env.KV);
+eventsRoute.get('/', eventsListRateLimit, async (c) => {
+  const db = createDb(c.env.DB)
+  const cache = new CacheService(c.env.KV)
 
   // Generate ETag from latest publishedAt timestamp
   const [latest] = await db
     .select({ max: events.publishedAt })
     .from(events)
-    .where(eq(events.status, "published"))
-    .limit(1);
+    .where(eq(events.status, 'published'))
+    .limit(1)
 
   const etag = await cache.getOrSet(
     EVENTS_ETAG_KV_KEY,
-    () => cache.generateETag(String(latest?.max ?? "0")),
+    () => cache.generateETag(String(latest?.max ?? '0')),
     300,
-  );
+  )
 
   // Handle conditional GET
-  const ifNoneMatch = c.req.header("If-None-Match");
+  const ifNoneMatch = c.req.header('If-None-Match')
   if (ifNoneMatch === etag) {
-    return c.newResponse(null, 304);
+    return c.newResponse(null, 304)
   }
 
   const data = await cache.getOrSet(
     EVENTS_LIST_KV_KEY,
     () =>
       db.query.events.findMany({
-        where: eq(events.status, "published"),
+        where: eq(events.status, 'published'),
         columns: {
           id: true,
           slug: true,
@@ -96,84 +101,85 @@ eventsRoute.get("/", async (c) => {
         },
       }),
     EVENTS_LIST_TTL,
-  );
+  )
 
-  c.header("ETag", etag);
+  c.header('ETag', etag)
   c.header(
-    "Cache-Control",
-    "public, max-age=604800, stale-while-revalidate=86400",
-  ); // 7 days
-  return c.json({ data });
-});
+    'Cache-Control',
+    'public, max-age=604800, stale-while-revalidate=86400',
+  ) // 7 days
+  return c.json({ data })
+})
 
 // GET /events/:slug
-eventsRoute.get("/:slug", async (c) => {
-  const { slug } = c.req.param();
-  const db = createDb(c.env.DB);
+eventsRoute.get('/:slug', async (c) => {
+  const { slug } = c.req.param()
+  const db = createDb(c.env.DB)
 
   const event = await db.query.events.findFirst({
-    where: and(eq(events.slug, slug), eq(events.status, "published")),
-  });
+    where: and(eq(events.slug, slug), eq(events.status, 'published')),
+  })
 
-  if (!event) throw notFound("Event");
+  if (!event) throw notFound('Event')
 
-  return c.json({ data: event });
-});
+  return c.json({ data: event })
+})
 
 // GET /events/:slug/slots — real-time, CF Cache 5s
-eventsRoute.get("/:slug/slots", async (c) => {
-  const { slug } = c.req.param();
-  const db = createDb(c.env.DB);
-  const cache = new CacheService(c.env.KV);
-  const slotsService = new SlotsService(db, cache);
+eventsRoute.get('/:slug/slots', eventsSlotsRateLimit, async (c) => {
+  const { slug } = c.req.param()
+  const db = createDb(c.env.DB)
+  const cache = new CacheService(c.env.KV)
+  const slotsService = new SlotsService(db, cache)
 
-  const info = await slotsService.getSlots(slug);
-  if (!info) throw notFound("Event");
+  const info = await slotsService.getSlots(slug)
+  if (!info) throw notFound('Event')
 
   // CF edge cache: all 30k users share this cached response for 5s
-  c.header("Cache-Control", "public, max-age=5, stale-while-revalidate=5");
+  c.header('Cache-Control', 'public, max-age=5, stale-while-revalidate=5')
 
-  return c.json({ data: info });
-});
+  return c.json({ data: info })
+})
 
 // POST /events — admin only
 eventsRoute.post(
-  "/",
+  '/',
   authMiddleware,
   adminMiddleware,
-  zValidator("json", createEventSchema),
+  adminEventsRateLimit,
+  zValidator('json', createEventSchema),
   async (c) => {
-    const body = c.req.valid("json");
-    const db = createDb(c.env.DB);
-    const cache = new CacheService(c.env.KV);
+    const body = c.req.valid('json')
+    const db = createDb(c.env.DB)
+    const cache = new CacheService(c.env.KV)
 
-    const [created] = await db.insert(events).values(body).returning();
+    const [created] = await db.insert(events).values(body).returning()
 
     // If publishing immediately, create a Google Forms Watch
     if (
-      body.status === "published" &&
+      body.status === 'published' &&
       body.gformsId &&
       c.env.GFORMS_SERVICE_ACCOUNT_JSON
     ) {
-      const webhookUrl = c.get("gformsWebhookUrl");
+      const webhookUrl = c.get('gformsWebhookUrl')
       if (webhookUrl) {
-        const gforms = new GFormsService(c.env.GFORMS_SERVICE_ACCOUNT_JSON);
+        const gforms = new GFormsService(c.env.GFORMS_SERVICE_ACCOUNT_JSON)
         try {
-          const watch = await gforms.createWatch(body.gformsId, webhookUrl);
+          const watch = await gforms.createWatch(body.gformsId, webhookUrl)
           const expiry = Math.floor(
-            new Date(watch.expireTime ?? "").getTime() / 1000,
-          );
+            new Date(watch.expireTime ?? '').getTime() / 1000,
+          )
           await db
             .update(events)
             .set({ watchId: watch.watchId, watchExpiresAt: expiry })
-            .where(eq(events.id, created!.id));
+            .where(eq(events.id, created!.id))
         } catch (err) {
-          console.error("[events] Failed to create Watch:", err);
+          console.error('[events] Failed to create Watch:', err)
         }
       } else {
         console.warn(
-          "[events] gformsWebhookUrl not configured \u2014 Watch not created. Pass gformsWebhookUrl to createLeapify().",
-        );
+          '[events] gformsWebhookUrl not configured \u2014 Watch not created. Pass gformsWebhookUrl to createLeapify().',
+        )
       }
     }
 
@@ -181,31 +187,31 @@ eventsRoute.post(
     await Promise.all([
       cache.del(EVENTS_LIST_KV_KEY),
       cache.del(EVENTS_ETAG_KV_KEY),
-    ]);
+    ])
 
-    return c.json({ data: created }, 201);
+    return c.json({ data: created }, 201)
   },
-);
+)
 
 // PATCH /events/:slug — admin only
-eventsRoute.patch("/:slug", authMiddleware, adminMiddleware, async (c) => {
-  const { slug } = c.req.param();
-  const body = await c.req.json<Partial<typeof createEventSchema._type>>();
-  const db = createDb(c.env.DB);
-  const cache = new CacheService(c.env.KV);
+eventsRoute.patch('/:slug', authMiddleware, adminMiddleware, async (c) => {
+  const { slug } = c.req.param()
+  const body = await c.req.json<Partial<z.infer<typeof createEventSchema>>>()
+  const db = createDb(c.env.DB)
+  const cache = new CacheService(c.env.KV)
 
   const [updated] = await db
     .update(events)
     .set(body)
     .where(eq(events.slug, slug))
-    .returning();
+    .returning()
 
-  if (!updated) throw notFound("Event");
+  if (!updated) throw notFound('Event')
 
   await Promise.all([
     cache.del(EVENTS_LIST_KV_KEY),
     cache.del(EVENTS_ETAG_KV_KEY),
-  ]);
+  ])
 
-  return c.json({ data: updated });
-});
+  return c.json({ data: updated })
+})

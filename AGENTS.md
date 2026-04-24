@@ -240,6 +240,45 @@ return c.json({ data: events }, 200, {
 
 ---
 
+### ADR-006: Layered Scraping Prevention
+
+**Problem:** CORS only restricts browsers — raw HTTP clients (`curl`, Python `requests`) bypass it entirely. Public endpoints like `GET /events` are scrapable by anyone. Authenticated mutation endpoints face credential-stuffing and per-account abuse.
+
+**Key insight:** No purely server-side mechanism can cryptographically distinguish a real browser from `curl`. Any token a browser can fetch, `curl` can fetch too. Signed request tokens add friction against naive scrapers only.
+
+**Decision:** Apply a layered defense matched to the actual threat per endpoint class:
+
+| Layer | Mechanism | Scope | Bypassed by |
+| ----- | --------- | ----- | ----------- |
+| 1 | **CF Bot Fight Mode** (dashboard) | All traffic | Residential proxies |
+| 2 | **CF WAF Rate Limiting** (dashboard) | All traffic, pre-Worker | Rotating proxies |
+| 3 | **KV IP rate limiting** (middleware) | All routes | Rotating proxies |
+| 4 | **Firebase JWT** (existing auth) | Mutation endpoints | Stolen real tokens |
+| 5 | **UID-based rate limiting** (KV) | Authenticated routes | Many accounts |
+| 6 | **`Referer` header guard** (middleware) | Mutation endpoints | Sophisticated clients |
+| 7 | **Cloudflare Turnstile** (client + Worker) | Public GETs, if needed | Human-in-the-loop only |
+
+**Endpoint-specific posture:**
+
+- **`POST /bookmarks`, `POST /events`, etc.** — Firebase JWT is the primary control. Scrapers need a real `@dlsu.edu.ph` account that completed OAuth. Rate limit by `user_id` in KV (not IP) to handle multi-account abuse.
+- **`GET /events`, `GET /faqs`** — Public data. IP rate limiting + CF Bot Fight Mode covers automated abuse. If data theft (competitor copying listings) becomes a real concern, add Cloudflare Turnstile on the frontend — the only reliable JS challenge.
+- **`GET /health`** — Intentionally open; no restrictions.
+
+**KV rate limit key schema:** `rl:<endpoint>:<identifier>` where identifier is `CF-Connecting-IP` for guests or `user_id` for authenticated requests.
+
+**Recommended limits:**
+
+| Endpoint | Identifier | Limit | Window |
+| -------- | ---------- | ----- | ------ |
+| `GET /events` | IP | 60 req | 60s |
+| `GET /events/:slug/slots` | IP | 120 req | 60s |
+| `POST /bookmarks` | user_id | 10 req | 60s |
+| `POST /events` (admin) | user_id | 20 req | 60s |
+
+**Consequences:** Layers 1–2 cost nothing and block >90% of bot traffic before the Worker runs. Layer 3 (KV rate limiting) is the primary code-level control — essential to implement. Firebase JWT (Layer 4) makes mutation endpoints already scrape-resistant by design. Turnstile (Layer 7) is only warranted if data scraping becomes an observed operational problem, not preemptively.
+
+---
+
 ## Database Schema (Essential)
 
 ```sql
