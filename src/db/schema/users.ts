@@ -5,7 +5,8 @@ export const users = sqliteTable('users', {
   id: text('id')
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID().replace(/-/g, '')),
-  firebaseUid: text('firebase_uid').notNull().unique(),
+  /** Google user ID (sub claim from JWT). */
+  googleUid: text('google_uid').notNull().unique(),
   email: text('email').notNull().unique(),
   name: text('name').notNull(),
   role: text('role', { enum: ['student', 'admin', 'super_admin'] })

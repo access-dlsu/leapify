@@ -9,11 +9,11 @@ Senior Systems Architect for **30,000+ concurrent students**. Design API contrac
 ## Context
 
 **Product:** Leapify — server-only npm module powering DLSU CSO LEAP event websites.
-Frontend devs install `leapify` and consume its `/api/` endpoints. All secrets (Firebase, Contentful, Resend, CF bindings) live in `.env` / `wrangler.toml` — never in client code.
+Frontend devs install `leapify` and consume its `/api/` endpoints. All secrets (Google OAuth, Contentful, Resend, CF bindings) live in `.env` / `wrangler.toml` — never in client code.
 
 **Scale:** 30,000 concurrent users · 10k req/s peak · <100ms p95 reads · <500ms p95 writes
 **Runtime:** Cloudflare Workers (Edge)
-**Non-negotiable:** Firebase Auth rate limits (~50 QPS) → cache tokens in KV
+**Auth:** Google Identity Services (GIS) — free, no rate limits
 
 ---
 
@@ -74,7 +74,7 @@ Run tests matching a pattern: `npx vitest run -t "bookmarks"`
 - Leapify is **installed as an npm package** by frontend teams (`npm install leapify`).
 - The backend exposes all endpoints under `/api/` — these **must only accept requests from the site's own origin** (CORS `allowedOrigins` enforced at the Hono layer).
 - **Exception:** `GET /health` is publicly accessible from any origin (used for uptime monitoring).
-- All third-party API keys (Firebase, Contentful, Resend) are stored in `.env` / Worker secrets — never exposed to the browser.
+- All third-party API keys (Google OAuth, Contentful, Resend) are stored in `.env` / Worker secrets — never exposed to the browser.
 
 ### API Contract
 
@@ -89,18 +89,18 @@ Run tests matching a pattern: `npx vitest run -t "bookmarks"`
 
 ### Auth Model
 
-| Role  | Token                               | Access                   |
-| ----- | ----------------------------------- | ------------------------ |
-| guest | None                                | Public endpoints only    |
-| user  | Valid Firebase JWT (`@dlsu.edu.ph`) | Protected user endpoints |
-| admin | JWT + `admin: true` claim           | Admin mutation endpoints |
+| Role  | Token                             | Access                   |
+| ----- | --------------------------------- | ------------------------ |
+| guest | None                              | Public endpoints only    |
+| user  | Valid Google JWT (`@dlsu.edu.ph`) | Protected user endpoints |
+| admin | JWT + admin role in D1            | Admin mutation endpoints |
 
 ### Directory Structure (Core)
 
 ```
 src/
 ├── routes/          # Route handlers (events, users, faqs, site-config, health)
-├── auth/            # middleware.ts · jwt.ts · cache.ts (KV token cache)
+├── auth/            # middleware.ts · jwt.ts
 ├── db/
 │   └── schema/      # Drizzle schemas + relations (events, users, bookmarks)
 ├── services/        # Business logic (CacheService, SlotsService, EmailRouter, GFormsService)
@@ -153,7 +153,7 @@ Internal routes require `X-Internal-Secret` header matching `INTERNAL_API_SECRET
 | ----------------- | ------------------------------------------- |
 | `LeapifyEnv`      | Hono env type with `Bindings` + `Variables` |
 | `LeapifyBindings` | CF bindings (D1, KV, Queue, secrets)        |
-| `LeapifyUser`     | Firebase claims + D1 role                   |
+| `LeapifyUser`     | Google claims + D1 role                     |
 
 | Export           | Entry                | Consumer                   |
 | ---------------- | -------------------- | -------------------------- |
@@ -183,22 +183,22 @@ Peer dependencies (`hono`, `drizzle-orm`, `@cloudflare/workers-types`) are **not
 
 ### ADR-002: Cloudflare as Primary Cache Layer
 
-**Problem:** 30k users + Firebase rate limits (~50 QPS) + D1 quota (5M reads/day) would be breached under raw traffic.
+**Problem:** 30k users + D1 quota (5M reads/day) would be breached under raw traffic.
 
 **Decision:** Use three Cloudflare cache tiers:
 
 | Tier        | Mechanism              | TTL    | Use Case                        |
 | ----------- | ---------------------- | ------ | ------------------------------- |
 | CF CDN Edge | `Cache-Control` + ETag | 7 days | `GET /events` list (static-ish) |
-| CF KV       | KV `put` with TTL      | 3,600s | Firebase JWT tokens             |
+| CF KV       | KV `put` with TTL      | 3,600s | JWT tokens                      |
 | CF KV       | KV `put` with TTL      | 5s     | Slot availability per event     |
 
 ```typescript
-// JWT cache — skip Firebase on subsequent requests
-await kv.put(`auth:token:${uid}`, JSON.stringify(payload), {
+// JWT cache — skip verification on subsequent requests
+await kv.put(`auth:user:${uid}`, JSON.stringify(payload), {
   expirationTtl: 3600,
 })
-const cached = await kv.get(`auth:token:${uid}`, 'json')
+const cached = await kv.get(`auth:user:${uid}`, 'json')
 if (cached) return cached
 
 // Events list — 7-day edge cache with ETag revalidation
@@ -210,7 +210,7 @@ return c.json({ data: events }, 200, {
 })
 ```
 
-**Consequences:** D1 reads drop to ~5 QPS on events. Auth cache hit rate >90% under burst load. Survives Firebase outages for cached users.
+**Consequences:** D1 reads drop to ~5 QPS on events. Auth cache hit rate >90% under burst load.
 
 ---
 
@@ -248,19 +248,19 @@ return c.json({ data: events }, 200, {
 
 **Decision:** Apply a layered defense matched to the actual threat per endpoint class:
 
-| Layer | Mechanism | Scope | Bypassed by |
-| ----- | --------- | ----- | ----------- |
-| 1 | **CF Bot Fight Mode** (dashboard) | All traffic | Residential proxies |
-| 2 | **CF WAF Rate Limiting** (dashboard) | All traffic, pre-Worker | Rotating proxies |
-| 3 | **KV IP rate limiting** (middleware) | All routes | Rotating proxies |
-| 4 | **Firebase JWT** (existing auth) | Mutation endpoints | Stolen real tokens |
-| 5 | **UID-based rate limiting** (KV) | Authenticated routes | Many accounts |
-| 6 | **`Referer` header guard** (middleware) | Mutation endpoints | Sophisticated clients |
-| 7 | **Cloudflare Turnstile** (client + Worker) | Public GETs, if needed | Human-in-the-loop only |
+| Layer | Mechanism                                  | Scope                   | Bypassed by            |
+| ----- | ------------------------------------------ | ----------------------- | ---------------------- |
+| 1     | **CF Bot Fight Mode** (dashboard)          | All traffic             | Residential proxies    |
+| 2     | **CF WAF Rate Limiting** (dashboard)       | All traffic, pre-Worker | Rotating proxies       |
+| 3     | **KV IP rate limiting** (middleware)       | All routes              | Rotating proxies       |
+| 4     | **Google JWT** (existing auth)             | Mutation endpoints      | Stolen real tokens     |
+| 5     | **UID-based rate limiting** (KV)           | Authenticated routes    | Many accounts          |
+| 6     | **`Referer` header guard** (middleware)    | Mutation endpoints      | Sophisticated clients  |
+| 7     | **Cloudflare Turnstile** (client + Worker) | Public GETs, if needed  | Human-in-the-loop only |
 
 **Endpoint-specific posture:**
 
-- **`POST /bookmarks`, `POST /events`, etc.** — Firebase JWT is the primary control. Scrapers need a real `@dlsu.edu.ph` account that completed OAuth. Rate limit by `user_id` in KV (not IP) to handle multi-account abuse.
+- **`POST /bookmarks`, `POST /events`, etc.** — JWT is the primary control. Scrapers need a real `@dlsu.edu.ph` account that completed OAuth. Rate limit by `user_id` in KV (not IP) to handle multi-account abuse.
 - **`GET /events`, `GET /faqs`** — Public data. IP rate limiting + CF Bot Fight Mode covers automated abuse. If data theft (competitor copying listings) becomes a real concern, add Cloudflare Turnstile on the frontend — the only reliable JS challenge.
 - **`GET /health`** — Intentionally open; no restrictions.
 
@@ -268,14 +268,14 @@ return c.json({ data: events }, 200, {
 
 **Recommended limits:**
 
-| Endpoint | Identifier | Limit | Window |
-| -------- | ---------- | ----- | ------ |
-| `GET /events` | IP | 60 req | 60s |
-| `GET /events/:slug/slots` | IP | 120 req | 60s |
-| `POST /bookmarks` | user_id | 10 req | 60s |
-| `POST /events` (admin) | user_id | 20 req | 60s |
+| Endpoint                  | Identifier | Limit   | Window |
+| ------------------------- | ---------- | ------- | ------ |
+| `GET /events`             | IP         | 60 req  | 60s    |
+| `GET /events/:slug/slots` | IP         | 120 req | 60s    |
+| `POST /bookmarks`         | user_id    | 10 req  | 60s    |
+| `POST /events` (admin)    | user_id    | 20 req  | 60s    |
 
-**Consequences:** Layers 1–2 cost nothing and block >90% of bot traffic before the Worker runs. Layer 3 (KV rate limiting) is the primary code-level control — essential to implement. Firebase JWT (Layer 4) makes mutation endpoints already scrape-resistant by design. Turnstile (Layer 7) is only warranted if data scraping becomes an observed operational problem, not preemptively.
+**Consequences:** Layers 1–2 cost nothing and block >90% of bot traffic before the Worker runs. Layer 3 (KV rate limiting) is the primary code-level control — essential to implement. JWT (Layer 4) makes mutation endpoints already scrape-resistant by design. Turnstile (Layer 7) is only warranted if data scraping becomes an observed operational problem, not preemptively.
 
 ---
 
@@ -283,7 +283,7 @@ return c.json({ data: events }, 200, {
 
 ```sql
 -- events: slug (unique), status (draft|queued|published), max_slots, registered_slots
--- users: id (Firebase UID), email, role (user|admin|super_admin)
+-- users: id, google_uid (unique), email, role (student|admin|super_admin)
 -- bookmarks: (user_id, event_id) composite PK
 -- site_config: key-value for maintenance_mode, registration_globally_open
 ```
@@ -312,7 +312,7 @@ return c.json({ data: events }, 200, {
 | ----------------- | ----------------------------------- | ------------------- |
 | Unit              | Vitest + mocks                      | >85% lines          |
 | Integration       | Hono test client + in-memory SQLite | All auth boundaries |
-| Auth verification | Mock Firebase via KV cache seed     | 100% of middleware  |
+| Auth verification | Mock JWT via KV cache seed          | 100% of middleware  |
 
 ### Test Setup
 
@@ -320,15 +320,15 @@ Tests live in `/tests`. Global setup (`tests/helpers/setup.ts`) mocks `drizzle-o
 
 ### Test Helpers
 
-| Helper                              | Signature                                 | Purpose                                              |
-| ----------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
-| `createTestApp()`                   | `() => HonoApp`                           | Hono app + mock KV/env bindings                      |
-| `makeTestToken(uid)`                | `(uid: string) => string`                 | Fake JWT that passes middleware's UID extraction     |
-| `seedUserInKV(kv, uid, role, dbId)` | `(kv, uid, role, dbId?) => Promise<void>` | Pre-seed cached user to bypass Firebase verification |
-| `resetTestDb()`                     | `() => void`                              | Reset in-memory SQLite to a clean migration state    |
-| `getTestDb()`                       | `() => DrizzleInstance`                   | Obtain the in-memory SQLite instance                 |
+| Helper                              | Signature                                 | Purpose                                           |
+| ----------------------------------- | ----------------------------------------- | ------------------------------------------------- |
+| `createTestApp()`                   | `() => HonoApp`                           | Hono app + mock KV/env bindings                   |
+| `makeTestToken(uid)`                | `(uid: string) => string`                 | Fake JWT that passes middleware's UID extraction  |
+| `seedUserInKV(kv, uid, role, dbId)` | `(kv, uid, role, dbId?) => Promise<void>` | Pre-seed cached user to bypass JWT verification   |
+| `resetTestDb()`                     | `() => void`                              | Reset in-memory SQLite to a clean migration state |
+| `getTestDb()`                       | `() => DrizzleInstance`                   | Obtain the in-memory SQLite instance              |
 
-**Critical:** Auth tests must NOT call real Firebase. Always use `makeTestToken` + `seedUserInKV`.
+**Critical:** Auth tests must NOT call real Google APIs. Always use `makeTestToken` + `seedUserInKV`.
 
 ---
 

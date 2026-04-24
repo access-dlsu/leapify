@@ -4,15 +4,17 @@
  * Import from 'leapify/client' — no Cloudflare, Drizzle, or Hono dependencies.
  *
  * @example
- * import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
- * import { auth } from '@/lib/firebase'
+ * import { createLeapifyClient, initGoogleSignIn } from 'leapify/client'
  *
- * const api = createLeapifyClient(
- *   process.env.NEXT_PUBLIC_API_URL!,
- *   () => getLeapifyToken(auth.currentUser),
- * )
- *
- * const events = await api.getEvents()
+ * // Initialize Google Sign-In
+ * await initGoogleSignIn({
+ *   clientId: 'your-client-id.apps.googleusercontent.com',
+ *   hostedDomain: 'dlsu.edu.ph',
+ *   callback: (jwt) => {
+ *     const api = createLeapifyClient('https://api.leapify.com', () => jwt)
+ *     const events = await api.getEvents()
+ *   },
+ * })
  */
 
 export type {
@@ -26,10 +28,25 @@ export type {
   LeapifyErrorBody,
   UserRole,
   EventStatus,
-} from "./types";
+  CreateEventBody,
+  UpdateEventBody,
+  CreateFaqBody,
+  UpdateFaqBody,
+  SiteConfigMap,
+  SiteConfigKey,
+} from './types'
 
-export { getLeapifyToken } from "./auth";
-export type { FirebaseUserLike } from "./auth";
+// Google Identity Services (GIS) - recommended
+export {
+  initGoogleSignIn,
+  signInWithGoogle,
+  renderGoogleButton,
+  disableGoogleAutoSelect,
+  revokeGoogleToken,
+  getLeapifyTokenFromJwt,
+  getCurrentGisConfig,
+} from './auth-gis'
+export type { GisConfig } from './auth-gis'
 
 /**
  * Structured error thrown by all client methods on non-2xx responses.
@@ -51,25 +68,25 @@ export class LeapifyApiError extends Error {
     public readonly code: string,
     message: string,
   ) {
-    super(message);
-    this.name = "LeapifyApiError";
+    super(message)
+    this.name = 'LeapifyApiError'
   }
 }
 
 // ─── Error code constants ───────────────────────────────────────────────────
 
 export const LEAPIFY_ERROR_CODES = {
-  UNAUTHORIZED: "UNAUTHORIZED",
-  DOMAIN_RESTRICTED: "DOMAIN_RESTRICTED",
-  FORBIDDEN: "FORBIDDEN",
-  NOT_FOUND: "NOT_FOUND",
-  CONFLICT: "CONFLICT",
-  TOO_MANY_REQUESTS: "TOO_MANY_REQUESTS",
-  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
-  INTERNAL_ERROR: "INTERNAL_ERROR",
-} as const;
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  DOMAIN_RESTRICTED: 'DOMAIN_RESTRICTED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  CONFLICT: 'CONFLICT',
+  TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+} as const
 
-export type LeapifyErrorCode = keyof typeof LEAPIFY_ERROR_CODES;
+export type LeapifyErrorCode = keyof typeof LEAPIFY_ERROR_CODES
 
 // ─── Client factory ─────────────────────────────────────────────────────────
 
@@ -82,92 +99,112 @@ import type {
   SiteConfig,
   ToggleBookmarkResult,
   LeapifyErrorBody,
-} from "./types";
+  CreateEventBody,
+  UpdateEventBody,
+  CreateFaqBody,
+  UpdateFaqBody,
+  SiteConfigMap,
+  SiteConfigKey,
+} from './types'
 
-type GetTokenFn = () => Promise<string | null>;
+type GetTokenFn = () => Promise<string | null>
 
 async function buildHeaders(
   getToken: GetTokenFn | undefined,
   extra: Record<string, string> = {},
 ): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
     ...extra,
-  };
-  if (getToken) {
-    const token = await getToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
   }
-  return headers;
+  if (getToken) {
+    const token = await getToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
 }
 
 async function parseResponse<T>(res: Response): Promise<T> {
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return undefined as T
 
-  const body = await res.json().catch(() => ({}));
+  const body = await res.json().catch(() => ({}))
 
   if (!res.ok) {
-    const err = (body as LeapifyErrorBody)?.error;
+    const err = (body as LeapifyErrorBody)?.error
     throw new LeapifyApiError(
       res.status,
-      err?.code ?? "UNKNOWN",
+      err?.code ?? 'UNKNOWN',
       err?.message ?? res.statusText,
-    );
+    )
   }
 
-  return (body as { data: T }).data;
+  return (body as { data: T }).data
 }
 
 /**
  * Creates a typed Leapify API client bound to a base URL.
  *
  * @param baseUrl - The deployed Leapify Worker URL (e.g. `https://api.leap.yourdomain.com`).
- * @param getToken - Optional async function that returns a Firebase ID token string,
- *   or null for guest requests. Use `getLeapifyToken(auth.currentUser)` from this module.
+ * @param getToken - Optional function that returns a JWT string,
+ *   or null for guest requests. Use GIS callback to get the JWT.
  *
  * @example
  * // lib/api.ts
- * import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
- * import { auth } from './firebase'
+ * import { createLeapifyClient, initGoogleSignIn } from 'leapify/client'
+ *
+ * let currentJwt: string | null = null
+ *
+ * await initGoogleSignIn({
+ *   clientId: 'your-client-id.apps.googleusercontent.com',
+ *   hostedDomain: 'dlsu.edu.ph',
+ *   callback: (jwt) => { currentJwt = jwt },
+ * })
  *
  * export const api = createLeapifyClient(
  *   process.env.NEXT_PUBLIC_API_URL!,
- *   () => getLeapifyToken(auth.currentUser),
+ *   () => currentJwt,
  * )
  */
 export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
-  const base = baseUrl.replace(/\/$/, "");
+  const base = baseUrl.replace(/\/$/, '')
 
   async function get<T>(path: string, init?: RequestInit): Promise<T> {
-    const headers = await buildHeaders(getToken, init?.headers as Record<string, string>);
-    const res = await fetch(`${base}${path}`, { ...init, method: "GET", headers });
-    return parseResponse<T>(res);
+    const headers = await buildHeaders(
+      getToken,
+      init?.headers as Record<string, string>,
+    )
+    const res = await fetch(`${base}${path}`, {
+      ...init,
+      method: 'GET',
+      headers,
+    })
+    return parseResponse<T>(res)
   }
 
   async function post<T>(path: string, body?: unknown): Promise<T> {
-    const headers = await buildHeaders(getToken);
+    const headers = await buildHeaders(getToken)
     const res = await fetch(`${base}${path}`, {
-      method: "POST",
+      method: 'POST',
       headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-    return parseResponse<T>(res);
+    })
+    return parseResponse<T>(res)
   }
 
   async function patch<T>(path: string, body: unknown): Promise<T> {
-    const headers = await buildHeaders(getToken);
+    const headers = await buildHeaders(getToken)
     const res = await fetch(`${base}${path}`, {
-      method: "PATCH",
+      method: 'PATCH',
       headers,
       body: JSON.stringify(body),
-    });
-    return parseResponse<T>(res);
+    })
+    return parseResponse<T>(res)
   }
 
   async function del<T>(path: string): Promise<T> {
-    const headers = await buildHeaders(getToken);
-    const res = await fetch(`${base}${path}`, { method: "DELETE", headers });
-    return parseResponse<T>(res);
+    const headers = await buildHeaders(getToken)
+    const res = await fetch(`${base}${path}`, { method: 'DELETE', headers })
+    return parseResponse<T>(res)
   }
 
   return {
@@ -180,15 +217,22 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
      * Use `now` (server unix epoch) for timestamp comparisons.
      */
     getConfig(): Promise<SiteConfig> {
-      return get<SiteConfig>("/config");
+      return get<SiteConfig>('/config')
     },
 
     /**
      * PATCH /config/:key — admin only.
-     * Upserts a site config value. Requires admin or super_admin role.
+     * Upserts a site config value with type safety. Requires admin or super_admin role.
+     *
+     * @example
+     * await api.setConfig('maintenance_mode', true)
+     * await api.setConfig('site_name', 'LEAP 2026')
      */
-    updateConfig<K extends string>(key: K, value: unknown): Promise<{ key: K; value: unknown }> {
-      return patch(`/config/${encodeURIComponent(key)}`, { value });
+    setConfig<K extends SiteConfigKey>(
+      key: K,
+      value: SiteConfigMap[K],
+    ): Promise<{ key: K; value: SiteConfigMap[K] }> {
+      return patch(`/config/${encodeURIComponent(key)}`, { value })
     },
 
     // ── Events ─────────────────────────────────────────────────────────────
@@ -198,7 +242,7 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
      * Returns all published events. Response is ETag-cached for 7 days.
      */
     getEvents(): Promise<LeapEvent[]> {
-      return get<LeapEvent[]>("/events");
+      return get<LeapEvent[]>('/events')
     },
 
     /**
@@ -206,7 +250,7 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
      * Returns a single published event by slug.
      */
     getEvent(slug: string): Promise<LeapEvent> {
-      return get<LeapEvent>(`/events/${encodeURIComponent(slug)}`);
+      return get<LeapEvent>(`/events/${encodeURIComponent(slug)}`)
     },
 
     /**
@@ -215,7 +259,7 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
      * Poll every 8–10 seconds on event detail pages.
      */
     getSlots(slug: string): Promise<SlotInfo> {
-      return get<SlotInfo>(`/events/${encodeURIComponent(slug)}/slots`);
+      return get<SlotInfo>(`/events/${encodeURIComponent(slug)}/slots`)
     },
 
     // ── Users ──────────────────────────────────────────────────────────────
@@ -226,7 +270,7 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
      * Use `profile.role` to gate admin UI.
      */
     getMe(): Promise<UserProfile | null> {
-      return get<UserProfile | null>("/users/me");
+      return get<UserProfile | null>('/users/me')
     },
 
     // ── Bookmarks ──────────────────────────────────────────────────────────
@@ -237,7 +281,7 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
      * Returns an empty array for unauthenticated users.
      */
     getBookmarks(): Promise<BookmarkEntry[]> {
-      return get<BookmarkEntry[]>("/users/me/bookmarks");
+      return get<BookmarkEntry[]>('/users/me/bookmarks')
     },
 
     /**
@@ -248,7 +292,7 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
     toggleBookmark(eventId: string): Promise<ToggleBookmarkResult> {
       return post<ToggleBookmarkResult>(
         `/users/me/bookmarks/${encodeURIComponent(eventId)}`,
-      );
+      )
     },
 
     /**
@@ -258,7 +302,7 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
     deleteBookmark(eventId: string): Promise<ToggleBookmarkResult> {
       return del<ToggleBookmarkResult>(
         `/users/me/bookmarks/${encodeURIComponent(eventId)}`,
-      );
+      )
     },
 
     // ── FAQs ───────────────────────────────────────────────────────────────
@@ -269,9 +313,54 @@ export function createLeapifyClient(baseUrl: string, getToken?: GetTokenFn) {
      * The `answer` field is markdown — render with a markdown library.
      */
     getFaqs(): Promise<Faq[]> {
-      return get<Faq[]>("/faqs");
+      return get<Faq[]>('/faqs')
     },
-  };
+
+    // ── Admin: Events ────────────────────────────────────────────────────
+
+    /**
+     * POST /events — admin only.
+     * Creates a new event. Returns the created event with HTTP 201.
+     * If status is 'published' and gformsId is set, a Google Forms Watch is created.
+     */
+    createEvent(body: CreateEventBody): Promise<LeapEvent> {
+      return post<LeapEvent>('/events', body)
+    },
+
+    /**
+     * PATCH /events/:slug — admin only.
+     * Updates an event. Only provided fields are modified.
+     */
+    updateEvent(slug: string, body: UpdateEventBody): Promise<LeapEvent> {
+      return patch<LeapEvent>(`/events/${encodeURIComponent(slug)}`, body)
+    },
+
+    // ── Admin: FAQs ──────────────────────────────────────────────────────
+
+    /**
+     * POST /faqs — admin only.
+     * Creates a new FAQ. Returns the created FAQ with HTTP 201.
+     */
+    createFaq(body: CreateFaqBody): Promise<Faq> {
+      return post<Faq>('/faqs', body)
+    },
+
+    /**
+     * PATCH /faqs/:id — admin only.
+     * Updates a FAQ. Only provided fields are modified.
+     */
+    updateFaq(id: string, body: UpdateFaqBody): Promise<Faq> {
+      return patch<Faq>(`/faqs/${encodeURIComponent(id)}`, body)
+    },
+
+    /**
+     * DELETE /faqs/:id — admin only.
+     * Soft-deletes a FAQ (sets isActive: false). Returns { deleted: true }.
+     */
+    deleteFaq(id: string): Promise<{ deleted: boolean }> {
+      return del<{ deleted: boolean }>(`/faqs/${encodeURIComponent(id)}`)
+    },
+  }
 }
 
-export type LeapifyClient = ReturnType<typeof createLeapifyClient>;
+export type LeapifyClient = ReturnType<typeof createLeapifyClient>

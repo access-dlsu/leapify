@@ -314,7 +314,7 @@ export function createPowChallengeMiddleware() {
     // Skip exempt paths (health, internal webhooks)
     if (EXEMPT_PATHS.some((p) => c.req.path.startsWith(p))) return next()
 
-    // Skip if client has a valid Authorization header (Firebase JWT — auth middleware will handle)
+    // Skip if client has a valid Authorization header (JWT — auth middleware will handle)
     if (c.req.header('Authorization')) return next()
 
     // Check for valid PoW cookie

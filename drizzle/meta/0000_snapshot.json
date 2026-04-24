@@ -14,8 +14,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "firebase_uid": {
-          "name": "firebase_uid",
+        "google_uid": {
+          "name": "google_uid",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -53,18 +53,14 @@
         }
       },
       "indexes": {
-        "users_firebase_uid_unique": {
-          "name": "users_firebase_uid_unique",
-          "columns": [
-            "firebase_uid"
-          ],
+        "users_google_uid_unique": {
+          "name": "users_google_uid_unique",
+          "columns": ["google_uid"],
           "isUnique": true
         },
         "users_email_unique": {
           "name": "users_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         }
       },
@@ -297,31 +293,22 @@
       "indexes": {
         "events_slug_unique": {
           "name": "events_slug_unique",
-          "columns": [
-            "slug"
-          ],
+          "columns": ["slug"],
           "isUnique": true
         },
         "idx_events_status_release": {
           "name": "idx_events_status_release",
-          "columns": [
-            "status",
-            "release_at"
-          ],
+          "columns": ["status", "release_at"],
           "isUnique": false
         },
         "idx_events_category": {
           "name": "idx_events_category",
-          "columns": [
-            "category_name"
-          ],
+          "columns": ["category_name"],
           "isUnique": false
         },
         "idx_events_slug": {
           "name": "idx_events_slug",
-          "columns": [
-            "slug"
-          ],
+          "columns": ["slug"],
           "isUnique": false
         }
       },
@@ -468,10 +455,7 @@
       "indexes": {
         "idx_bookmarks_user_event": {
           "name": "idx_bookmarks_user_event",
-          "columns": [
-            "user_id",
-            "event_id"
-          ],
+          "columns": ["user_id", "event_id"],
           "isUnique": true
         }
       },
@@ -480,12 +464,8 @@
           "name": "bookmarks_user_id_users_id_fk",
           "tableFrom": "bookmarks",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -493,12 +473,8 @@
           "name": "bookmarks_event_id_events_id_fk",
           "tableFrom": "bookmarks",
           "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

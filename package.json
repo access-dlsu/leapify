@@ -1,6 +1,6 @@
 {
   "name": "leapify",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "DLSU CSO LEAP backend — run as a standalone Cloudflare Worker or install as an npm module",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -53,11 +53,8 @@
       "ALLOWED_ORIGINS": {
         "description": "Comma-separated allowed origins (e.g., https://yoursite.com). Leave empty to block all cross-origin requests."
       },
-      "FIREBASE_PROJECT_ID": {
-        "description": "Firebase Project ID for authentication."
-      },
-      "FIREBASE_WEB_API_KEY": {
-        "description": "Firebase Web API Key."
+      "GOOGLE_CLIENT_ID": {
+        "description": "Google OAuth 2.0 Client ID for GIS authentication."
       },
       "GFORMS_SERVICE_ACCOUNT_JSON": {
         "description": "Google Forms Service Account JSON."

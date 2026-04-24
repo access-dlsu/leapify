@@ -23,8 +23,8 @@ export interface LeapifyBindings {
   ALLOWED_ORIGINS?: string
 
   // Secrets (set via `wrangler secret put`)
-  FIREBASE_PROJECT_ID: string
-  FIREBASE_WEB_API_KEY?: string
+  /** Google OAuth Client ID for GIS (Google Identity Services) authentication. */
+  GOOGLE_CLIENT_ID: string
   GFORMS_SERVICE_ACCOUNT_JSON: string
   GFORMS_WEBHOOK_SECRET: string
   CONTENTFUL_SPACE_ID?: string

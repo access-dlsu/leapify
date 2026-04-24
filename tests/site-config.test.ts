@@ -17,7 +17,7 @@ describe('Site Config API', () => {
     const db = getTestDb()
 
     const adminUser = await seedUser(db, {
-      firebaseUid: 'admin-uid',
+      googleUid: 'admin-uid',
       email: 'admin@dlsu.edu.ph',
       role: 'admin',
     })
@@ -33,7 +33,7 @@ describe('Site Config API', () => {
   test('API-CONFIG-001: GET /config returns structured config with defaults', async () => {
     const res = await app.request('/config', { method: 'GET' }, env)
     expect(res.status).toBe(200)
-    const body = await res.json() as any
+    const body = (await res.json()) as any
     expect(body.data.comingSoonUntil).toBe(1700000000)
     expect(body.data.registrationGloballyOpen).toBe(true)
     expect(body.data.maintenanceMode).toBe(false)
@@ -42,30 +42,38 @@ describe('Site Config API', () => {
   })
 
   test('API-CONFIG-002: Admin can update a config key (upsert)', async () => {
-    const res = await app.request('/config/site_ends_at', {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
+    const res = await app.request(
+      '/config/site_ends_at',
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ value: 1800000000 }),
       },
-      body: JSON.stringify({ value: 1800000000 }),
-    }, env)
+      env,
+    )
     expect(res.status).toBe(200)
-    const body = await res.json() as any
+    const body = (await res.json()) as any
     expect(body.data.key).toBe('site_ends_at')
     expect(body.data.value).toBe(1800000000)
 
     const checkRes = await app.request('/config', { method: 'GET' }, env)
-    const checkBody = await checkRes.json() as any
+    const checkBody = (await checkRes.json()) as any
     expect(checkBody.data.siteEndsAt).toBe(1800000000)
   })
 
   test('API-CONFIG-003: Guest cannot update config — returns 401', async () => {
-    const res = await app.request('/config/site_ends_at', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value: 1 }),
-    }, env)
+    const res = await app.request(
+      '/config/site_ends_at',
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: 1 }),
+      },
+      env,
+    )
     expect(res.status).toBe(401)
   })
 })

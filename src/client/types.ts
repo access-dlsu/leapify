@@ -3,9 +3,14 @@
  * Import from 'leapify/types' — no Cloudflare, Drizzle, or Hono dependencies.
  */
 
-export type EventStatus = "draft" | "queued" | "published" | "ended" | "cancelled";
+export type EventStatus =
+  | 'draft'
+  | 'queued'
+  | 'published'
+  | 'ended'
+  | 'cancelled'
 
-export type UserRole = "student" | "admin" | "super_admin";
+export type UserRole = 'student' | 'admin' | 'super_admin'
 
 /**
  * A published event as returned by GET /events and GET /events/:slug.
@@ -16,30 +21,30 @@ export type UserRole = "student" | "admin" | "super_admin";
  * This type covers the union of both; extra fields are nullable/optional.
  */
 export interface LeapEvent {
-  id: string;
-  slug: string;
-  categoryName: string;
-  categoryPath: string;
-  title: string;
-  org: string | null;
-  venue: string | null;
-  dateTime: string | null;
-  startsAt: number | null;
-  endsAt: number | null;
-  price: string | null;
-  backgroundColor: string | null;
-  backgroundImageUrl: string | null;
-  subtheme: string | null;
-  isMajor: boolean;
-  maxSlots: number;
-  registeredSlots: number;
-  gformsUrl: string | null;
-  registrationOpensAt: number | null;
-  registrationClosesAt: number | null;
-  publishedAt: number | null;
+  id: string
+  slug: string
+  categoryName: string
+  categoryPath: string
+  title: string
+  org: string | null
+  venue: string | null
+  dateTime: string | null
+  startsAt: number | null
+  endsAt: number | null
+  price: string | null
+  backgroundColor: string | null
+  backgroundImageUrl: string | null
+  subtheme: string | null
+  isMajor: boolean
+  maxSlots: number
+  registeredSlots: number
+  gformsUrl: string | null
+  registrationOpensAt: number | null
+  registrationClosesAt: number | null
+  publishedAt: number | null
   // Present only on GET /events/:slug
-  status?: EventStatus;
-  createdAt?: number;
+  status?: EventStatus
+  createdAt?: number
 }
 
 /**
@@ -47,10 +52,10 @@ export interface LeapEvent {
  * Refreshes every 5 seconds at the CF edge.
  */
 export interface SlotInfo {
-  available: number;
-  total: number;
-  registered: number;
-  isFull: boolean;
+  available: number
+  total: number
+  registered: number
+  isFull: boolean
 }
 
 /**
@@ -58,20 +63,21 @@ export interface SlotInfo {
  * Returns null if the request is unauthenticated.
  */
 export interface UserProfile {
-  id: string;
-  firebaseUid: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  createdAt: number;
+  id: string
+  /** Google user ID (sub claim from JWT). */
+  googleUid: string
+  email: string
+  name: string
+  role: UserRole
+  createdAt: number
 }
 
 /**
  * A single entry in the user's bookmark list from GET /users/me/bookmarks.
  */
 export interface BookmarkEntry {
-  bookmarkedAt: number;
-  event: LeapEvent;
+  bookmarkedAt: number
+  event: LeapEvent
 }
 
 /**
@@ -79,14 +85,14 @@ export interface BookmarkEntry {
  * The `answer` field is markdown.
  */
 export interface Faq {
-  id: string;
-  question: string;
-  answer: string;
-  category: string | null;
-  sortOrder: number;
-  isActive: boolean;
-  createdAt: number;
-  updatedAt: number;
+  id: string
+  question: string
+  answer: string
+  category: string | null
+  sortOrder: number
+  isActive: boolean
+  createdAt: number
+  updatedAt: number
 }
 
 /**
@@ -95,12 +101,12 @@ export interface Faq {
  * client clock drift.
  */
 export interface SiteConfig {
-  comingSoonUntil: number | null;
-  siteEndsAt: number | null;
-  siteName: string | null;
-  registrationGloballyOpen: boolean;
-  maintenanceMode: boolean;
-  now: number;
+  comingSoonUntil: number | null
+  siteEndsAt: number | null
+  siteName: string | null
+  registrationGloballyOpen: boolean
+  maintenanceMode: boolean
+  now: number
 }
 
 /**
@@ -108,7 +114,7 @@ export interface SiteConfig {
  * DELETE /users/me/bookmarks/:eventId.
  */
 export interface ToggleBookmarkResult {
-  bookmarked: boolean;
+  bookmarked: boolean
 }
 
 /**
@@ -117,7 +123,77 @@ export interface ToggleBookmarkResult {
  */
 export interface LeapifyErrorBody {
   error: {
-    code: string;
-    message: string;
-  };
+    code: string
+    message: string
+  }
 }
+
+// ─── Admin mutation types ───────────────────────────────────────────────────
+
+/**
+ * Body for POST /events (create event).
+ * Only required fields are marked; rest are optional.
+ */
+export interface CreateEventBody {
+  slug: string
+  categoryName: string
+  categoryPath: string
+  title: string
+  org?: string | null
+  venue?: string | null
+  dateTime?: string | null
+  startsAt?: number | null
+  endsAt?: number | null
+  price?: string | null
+  backgroundColor?: string | null
+  backgroundImageUrl?: string | null
+  subtheme?: string | null
+  isMajor?: boolean
+  maxSlots?: number
+  gformsId?: string | null
+  gformsUrl?: string | null
+  releaseAt?: number | null
+  registrationOpensAt?: number | null
+  registrationClosesAt?: number | null
+  contentfulEntryId?: string | null
+  status?: 'draft' | 'queued' | 'published'
+}
+
+/**
+ * Body for PATCH /events/:slug (update event).
+ * All fields optional — only provided fields are updated.
+ */
+export type UpdateEventBody = Partial<CreateEventBody>
+
+/**
+ * Body for POST /faqs (create FAQ).
+ */
+export interface CreateFaqBody {
+  question: string
+  answer: string
+  category?: string | null
+  sortOrder?: number
+}
+
+/**
+ * Body for PATCH /faqs/:id (update FAQ).
+ * All fields optional — only provided fields are updated.
+ */
+export type UpdateFaqBody = Partial<CreateFaqBody>
+
+/**
+ * Typed map of site config keys to their value types.
+ */
+export interface SiteConfigMap {
+  coming_soon_until: number
+  site_ends_at: number
+  site_name: string
+  registration_globally_open: boolean
+  maintenance_mode: boolean
+  snapshot_completed: boolean
+}
+
+/**
+ * Valid site config keys.
+ */
+export type SiteConfigKey = keyof SiteConfigMap

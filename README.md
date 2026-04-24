@@ -2,10 +2,10 @@
 
 The backend for DLSU CSO LEAP event websites. Leapify ships as:
 
-| Mode | When to use |
-| :--- | :--- |
-| **Standalone Worker** | You want a zero-code deploy — just configure secrets and run `wrangler deploy` |
-| **npm module** | You have your own Worker / Next.js / SvelteKit app and want to mount Leapify inside it |
+| Mode                  | When to use                                                                            |
+| :-------------------- | :------------------------------------------------------------------------------------- |
+| **Standalone Worker** | You want a zero-code deploy — just configure secrets and run `wrangler deploy`         |
+| **npm module**        | You have your own Worker / Next.js / SvelteKit app and want to mount Leapify inside it |
 
 Both modes share exactly the same routes, auth, caching, and email logic.
 
@@ -31,9 +31,9 @@ Edit `wrangler.toml` with your D1 database ID and KV namespace ID, then set your
 wrangler secret put ALLOWED_ORIGINS
 # → "https://yoursite.com,https://www.yoursite.com"
 
-# Firebase
-wrangler secret put FIREBASE_PROJECT_ID
-wrangler secret put FIREBASE_WEB_API_KEY
+# Google OAuth (GIS)
+wrangler secret put GOOGLE_CLIENT_ID
+# → "your-client-id.apps.googleusercontent.com"
 
 # Google Forms
 wrangler secret put GFORMS_SERVICE_ACCOUNT_JSON
@@ -94,29 +94,38 @@ export default createLeapify({
 })
 ```
 
-**Browser / client components**:
+**Browser / client components** (using GIS):
 
 ```ts
-import { createLeapifyClient, getLeapifyToken } from 'leapify/client'
-import { auth } from '@/lib/firebase'
+import { createLeapifyClient, initGoogleSignIn } from 'leapify/client'
+
+let currentJwt: string | null = null
+
+await initGoogleSignIn({
+  clientId: 'your-client-id.apps.googleusercontent.com',
+  hostedDomain: 'dlsu.edu.ph',
+  callback: (jwt) => {
+    currentJwt = jwt
+  },
+})
 
 const api = createLeapifyClient(
   process.env.NEXT_PUBLIC_API_URL!,
-  () => getLeapifyToken(auth.currentUser),
+  () => currentJwt,
 )
 
-const events = await api.getEvents()   // → LeapEvent[]
-const config = await api.getConfig()   // → SiteConfig
-const me     = await api.getMe()       // → UserProfile | null
+const events = await api.getEvents() // → LeapEvent[]
+const config = await api.getConfig() // → SiteConfig
+const me = await api.getMe() // → UserProfile | null
 ```
 
-> Full setup and per-endpoint examples → **[Frontend Integration Guide](./docs/frontend-integration-guide.md)**
+> Full setup and per-endpoint examples → **[Integration Guide](./docs/GUIDE.md)**
 
 ---
 
 ## How It Works
 
-Leapify exposes `/api/` endpoints that your frontend consumes. The backend handles Firebase Auth, Cloudflare D1 (database), Contentful (CMS), and transactional email (Amazon SES primary / Resend fallback) — all credentials live in `.env` / `wrangler.toml`, never in browser code.
+Leapify exposes `/api/` endpoints that your frontend consumes. The backend handles Google OAuth, Cloudflare D1 (database), Contentful (CMS), and transactional email (Amazon SES primary / Resend fallback) — all credentials live in `.env` / `wrangler.toml`, never in browser code.
 
 - `/api/*` — restricted to your site's origin (`allowedOrigins` CORS gate)
 - `/health` — publicly accessible for uptime monitoring; reports which email providers are configured
@@ -125,42 +134,42 @@ Leapify exposes `/api/` endpoints that your frontend consumes. The backend handl
 
 ## Tech Stack
 
-| Layer          | Technology              | Purpose                                                    |
-| :------------- | :---------------------- | :--------------------------------------------------------- |
-| **Framework**  | Hono                    | Edge-optimized, <1ms cold start                            |
-| **ORM**        | Drizzle + D1            | Type-safe SQL on Cloudflare's serverless SQLite             |
-| **Validation** | Zod                     | Runtime schema validation                                  |
-| **Cache**      | Cloudflare KV + CDN     | JWT caching, slot availability, edge response cache        |
-| **CMS**        | Contentful              | Headless CMS for all event/FAQ/site content                |
-| **Email**      | Amazon SES + CF Queues  | Async transactional email — SES primary, Resend fallback   |
-| **Auth**       | Firebase Auth           | Google Sign-In, restricted to `@dlsu.edu.ph`               |
-| **Testing**    | Vitest + CF pool        | Unit + integration tests on real CF runtime                |
+| Layer          | Technology               | Purpose                                                  |
+| :------------- | :----------------------- | :------------------------------------------------------- |
+| **Framework**  | Hono                     | Edge-optimized, <1ms cold start                          |
+| **ORM**        | Drizzle + D1             | Type-safe SQL on Cloudflare's serverless SQLite          |
+| **Validation** | Zod                      | Runtime schema validation                                |
+| **Cache**      | Cloudflare KV + CDN      | JWT caching, slot availability, edge response cache      |
+| **CMS**        | Contentful               | Headless CMS for all event/FAQ/site content              |
+| **Email**      | Amazon SES + CF Queues   | Async transactional email — SES primary, Resend fallback |
+| **Auth**       | Google Identity Services | Google Sign-In, restricted to `@dlsu.edu.ph`             |
+| **Testing**    | Vitest + CF pool         | Unit + integration tests on real CF runtime              |
 
 ---
 
 ## Infrastructure
 
-| Service           | Quota                                         | Role                          |
-| :---------------- | :-------------------------------------------- | :---------------------------- |
-| Cloudflare D1     | 5M reads/day, 100k writes/day (Pro)           | Primary relational database   |
-| Cloudflare KV     | 10M reads/day (Pro)                           | JWT cache + slot availability |
-| Cloudflare Queues | —                                             | Async job dispatch            |
-| Contentful        | 100k API calls/mo, 50GB CDN (Free)            | All CMS content               |
-| Firebase Auth     | Usage-based                                   | Identity + JWT issuance       |
-| Amazon SES        | ~62k emails/mo free tier; $0.10/1k after      | Primary transactional email   |
-| Resend            | 50k emails/mo (Pro)                           | Fallback transactional email  |
+| Service           | Quota                                    | Role                          |
+| :---------------- | :--------------------------------------- | :---------------------------- |
+| Cloudflare D1     | 5M reads/day, 100k writes/day (Pro)      | Primary relational database   |
+| Cloudflare KV     | 10M reads/day (Pro)                      | JWT cache + slot availability |
+| Cloudflare Queues | —                                        | Async job dispatch            |
+| Contentful        | 100k API calls/mo, 50GB CDN (Free)       | All CMS content               |
+| Google OAuth      | Free (unlimited)                         | Identity + JWT issuance       |
+| Amazon SES        | ~62k emails/mo free tier; $0.10/1k after | Primary transactional email   |
+| Resend            | 50k emails/mo (Pro)                      | Fallback transactional email  |
 
 ---
 
 ## Caching Strategy
 
-Three Cloudflare cache tiers keep D1/Firebase within quota at 30k concurrent users:
+Three Cloudflare cache tiers keep D1 within quota at 30k concurrent users:
 
-| Tier          | TTL    | What it caches                  |
-| :------------ | :----- | :------------------------------ |
-| CF CDN Edge   | 7 days | `GET /events` list (ETag-gated) |
-| CF KV         | 3,600s | Firebase JWT tokens             |
-| CF KV         | 5s     | Slot availability per event     |
+| Tier        | TTL    | What it caches                  |
+| :---------- | :----- | :------------------------------ |
+| CF CDN Edge | 7 days | `GET /events` list (ETag-gated) |
+| CF KV       | 3,600s | JWT tokens                      |
+| CF KV       | 5s     | Slot availability per event     |
 
 ---
 
@@ -168,17 +177,17 @@ Three Cloudflare cache tiers keep D1/Firebase within quota at 30k concurrent use
 
 All users must sign in with `@dlsu.edu.ph` Google accounts. The backend rejects any other domain with `403 DOMAIN_RESTRICTED`.
 
-| Role    | Token                         | Access                    |
-| :------ | :---------------------------- | :------------------------ |
-| `guest` | None                          | Public endpoints only     |
-| `user`  | Firebase JWT (`@dlsu.edu.ph`) | Protected user endpoints  |
-| `admin` | JWT + `admin: true` claim     | Admin mutation endpoints  |
+| Role    | Token                       | Access                   |
+| :------ | :-------------------------- | :----------------------- |
+| `guest` | None                        | Public endpoints only    |
+| `user`  | Google JWT (`@dlsu.edu.ph`) | Protected user endpoints |
+| `admin` | JWT + admin role in D1      | Admin mutation endpoints |
 
 ---
 
 ## Resilience at Scale
 
-**Firebase Auth (~50 QPS limit):** JWTs are cached in Cloudflare KV with a 3,600s TTL — >90% of requests skip Firebase entirely.
+**Google OAuth (free, no rate limits):** JWTs are cached in Cloudflare KV with a 3,600s TTL — requests skip verification on cache hit.
 
 **Email (200–500ms send latency):** All email jobs are pushed to a Cloudflare Queue. The HTTP response returns immediately (`202 Accepted`); the consumer worker sends via **Amazon SES** (primary). If SES returns a non-retryable error **and** `RESEND_API_KEY` is set, the job is retried via **Resend** before landing in the DLQ. If `RESEND_API_KEY` is not set, fallback is skipped and the job goes straight to the DLQ after SES exhausts its retries.
 

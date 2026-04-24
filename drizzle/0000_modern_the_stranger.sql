@@ -1,13 +1,13 @@
 CREATE TABLE `users` (
 	`id` text PRIMARY KEY NOT NULL,
-	`firebase_uid` text NOT NULL,
+	`google_uid` text NOT NULL,
 	`email` text NOT NULL,
 	`name` text NOT NULL,
 	`role` text DEFAULT 'student' NOT NULL,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `users_firebase_uid_unique` ON `users` (`firebase_uid`);--> statement-breakpoint
+CREATE UNIQUE INDEX `users_google_uid_unique` ON `users` (`google_uid`);--> statement-breakpoint
 CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);--> statement-breakpoint
 CREATE TABLE `events` (
 	`id` text PRIMARY KEY NOT NULL,

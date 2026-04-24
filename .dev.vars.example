@@ -2,11 +2,13 @@
 # .dev.vars is the Wrangler equivalent of .env for local `wrangler dev`.
 # NEVER commit .dev.vars to git.
 
-# Firebase 
-FIREBASE_PROJECT_ID="your-firebase-project-id"
-FIREBASE_WEB_API_KEY="AIzaSy..."
+# Google OAuth (GIS - Google Identity Services)
+# Go to GCP Console → APIs & Services → Credentials → Create OAuth 2.0 Client ID
+# Type: Web application
+# Add http://localhost:8787 to Authorized JavaScript origins
+GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
 
-# Google Forms Service Account 
+# Google Forms Service Account
 # Go to GCP Console → IAM → Service Accounts → Create → Download JSON key.
 # Grant the service account "Forms API" access in the Cloud Console.
 # Paste the full JSON as a single line (escape inner quotes with \").

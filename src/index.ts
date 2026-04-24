@@ -20,23 +20,23 @@
  * import type { LeapEvent } from 'leapify/types'
  */
 
-if (typeof document !== "undefined") {
+if (typeof document !== 'undefined') {
   throw new Error(
-    "[leapify] This module is server-only (Cloudflare Workers / server runtimes). " +
-      "Do not import it in browser or client-component code. " +
+    '[leapify] This module is server-only (Cloudflare Workers / server runtimes). ' +
+      'Do not import it in browser or client-component code. ' +
       "Use 'leapify/client' for browser-safe typed API utilities.",
-  );
+  )
 }
 
-import { createApp, type LeapifyAppOptions } from "./app";
-import { createQueueHandler } from "./queues/handlers";
-import { batchRelease } from "./cron/batch-release";
-import { reconcileSlots } from "./cron/reconcile-slots";
-import { reminderEmails } from "./cron/reminder-emails";
-import { lifecycleCheck } from "./cron/lifecycle-check";
-import { renewWatches } from "./cron/renew-watches";
-import type { LeapifyBindings } from "./types";
-import type { LeapifyJob } from "./queues/jobs";
+import { createApp, type LeapifyAppOptions } from './app'
+import { createQueueHandler } from './queues/handlers'
+import { batchRelease } from './cron/batch-release'
+import { reconcileSlots } from './cron/reconcile-slots'
+import { reminderEmails } from './cron/reminder-emails'
+import { lifecycleCheck } from './cron/lifecycle-check'
+import { renewWatches } from './cron/renew-watches'
+import type { LeapifyBindings } from './types'
+import type { LeapifyJob } from './queues/jobs'
 
 export interface LeapifyOptions extends LeapifyAppOptions {}
 
@@ -49,8 +49,8 @@ export interface LeapifyOptions extends LeapifyAppOptions {}
  * export default createLeapify({ allowedOrigins: ['https://yourdomain.com'] })
  */
 export function createLeapify(options: LeapifyOptions = {}) {
-  const app = createApp(options);
-  let loggedEmailConfig = false;
+  const app = createApp(options)
+  let loggedEmailConfig = false
 
   return {
     /**
@@ -63,22 +63,22 @@ export function createLeapify(options: LeapifyOptions = {}) {
       ctx: ExecutionContext,
     ): Promise<Response> {
       if (!loggedEmailConfig) {
-        loggedEmailConfig = true;
+        loggedEmailConfig = true
         const hasSes = !!(
           env.SES_REGION &&
           env.SES_ACCESS_KEY_ID &&
           env.SES_SECRET_ACCESS_KEY
-        );
-        const hasResend = !!env.RESEND_API_KEY;
+        )
+        const hasResend = !!env.RESEND_API_KEY
 
         if (!hasSes && !hasResend) {
           console.warn(
-            "[leapify] Email functionality is DISABLED (no SES or Resend credentials).",
-          );
+            '[leapify] Email functionality is DISABLED (no SES or Resend credentials).',
+          )
         }
       }
 
-      return Promise.resolve(app.fetch(request, env, ctx));
+      return Promise.resolve(app.fetch(request, env, ctx))
     },
 
     // Cloudflare Workers scheduled handler. Routes cron triggers by schedule string.
@@ -92,16 +92,16 @@ export function createLeapify(options: LeapifyOptions = {}) {
       env: LeapifyBindings,
       ctx: ExecutionContext,
     ): Promise<void> {
-      const { cron } = event;
+      const { cron } = event
 
-      if (cron === "* * * * *") await batchRelease(env);
-      if (cron === "*/5 * * * *") await reconcileSlots(env);
-      if (cron === "0 * * * *") {
+      if (cron === '* * * * *') await batchRelease(env)
+      if (cron === '*/5 * * * *') await reconcileSlots(env)
+      if (cron === '0 * * * *') {
         ctx.waitUntil(
           Promise.all([reminderEmails(env), lifecycleCheck(env, ctx)]),
-        );
+        )
       }
-      if (cron === "0 0 * * *") await renewWatches(env);
+      if (cron === '0 0 * * *') await renewWatches(env)
     },
 
     /**
@@ -112,27 +112,27 @@ export function createLeapify(options: LeapifyOptions = {}) {
       batch: MessageBatch<LeapifyJob>,
       env: LeapifyBindings,
     ): Promise<void> {
-      const handler = createQueueHandler(env);
-      return handler(batch);
+      const handler = createQueueHandler(env)
+      return handler(batch)
     },
-  };
+  }
 }
 
 // Re-exports
 
-export { createQueueHandler } from "./queues/handlers";
-export { createDb } from "./db";
+export { createQueueHandler } from './queues/handlers'
+export { createDb } from './db'
 
 export type {
   LeapifyBindings,
   LeapifyEnv,
   SiteConfigKey,
   SiteConfigMap,
-} from "./types";
-export type { LeapifyUser, FirebaseTokenClaims } from "./auth/types";
-export type { LeapifyDb } from "./db";
-export type { LeapifyJob } from "./queues/jobs";
-export type { SlotInfo } from "./services/slots";
+} from './types'
+export type { LeapifyUser, GoogleTokenClaims } from './auth/types'
+export type { LeapifyDb } from './db'
+export type { LeapifyJob } from './queues/jobs'
+export type { SlotInfo } from './services/slots'
 
 // Schema re-exports for consumers running drizzle-kit migrations
-export * from "./db/schema";
+export * from './db/schema'

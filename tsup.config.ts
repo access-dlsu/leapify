@@ -3,6 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig([
   // ── npm module entries (ESM + CJS) ──────────────────────────────────────
   {
+    tsconfig: 'tsconfig.build.json',
     entry: [
       'src/index.ts',
       'src/client/index.ts',
@@ -22,6 +23,7 @@ export default defineConfig([
   // ── standalone worker entry (ESM only — CF Workers require ESM) ─────────
   // This builds dist/worker.js, referenced by wrangler.toml main = "dist/worker.js"
   {
+    tsconfig: 'tsconfig.build.json',
     entry: { worker: 'src/worker.ts' },
     format: ['esm'],
     dts: false, // worker.ts is not a public API surface

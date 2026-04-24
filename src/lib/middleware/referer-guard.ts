@@ -11,7 +11,7 @@ import { forbidden } from '../errors'
  *
  * This is a friction layer — it stops naive raw-HTTP clients that don't set Referer.
  * Sophisticated clients can spoof it, so this must NOT be relied on as the sole control
- * for authenticated mutation endpoints (Firebase JWT is the primary control there).
+ * for authenticated mutation endpoints (JWT is the primary control there).
  *
  * Skipped entirely for /health and /internal routes.
  */
@@ -31,7 +31,9 @@ export function createRefererGuard(allowedOrigins: string[]) {
 
     const referer = c.req.header('referer') ?? ''
 
-    const isAllowed = allowedOrigins.some((origin) => referer.startsWith(origin))
+    const isAllowed = allowedOrigins.some((origin) =>
+      referer.startsWith(origin),
+    )
     if (!isAllowed) {
       throw forbidden('Request origin not permitted')
     }

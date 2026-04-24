@@ -17,14 +17,18 @@ describe('FAQs API', () => {
     const db = getTestDb()
 
     const adminUser = await seedUser(db, {
-      firebaseUid: 'admin-uid',
+      googleUid: 'admin-uid',
       email: 'admin@dlsu.edu.ph',
       role: 'admin',
     })
     await seedUserInKV(kv, 'admin-uid', 'admin', adminUser.id)
     adminToken = makeTestToken('admin-uid')
 
-    const activeFaq = await seedFaq(db, { question: 'Active Q', answer: 'A1', isActive: true })
+    const activeFaq = await seedFaq(db, {
+      question: 'Active Q',
+      answer: 'A1',
+      isActive: true,
+    })
     activeFaqId = activeFaq.id
     await seedFaq(db, { question: 'Inactive Q', answer: 'A2', isActive: false })
   })
@@ -32,83 +36,107 @@ describe('FAQs API', () => {
   test('API-FAQS-001: List active FAQs only', async () => {
     const res = await app.request('/faqs', { method: 'GET' }, env)
     expect(res.status).toBe(200)
-    const body = await res.json() as any
+    const body = (await res.json()) as any
     expect(body.data).toHaveLength(1)
     expect(body.data[0].question).toBe('Active Q')
   })
 
   test('API-FAQS-002: Admin creates FAQ', async () => {
-    const res = await app.request('/faqs', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
+    const res = await app.request(
+      '/faqs',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ question: 'New Q?', answer: 'New A' }),
       },
-      body: JSON.stringify({ question: 'New Q?', answer: 'New A' }),
-    }, env)
+      env,
+    )
     expect(res.status).toBe(201)
-    const body = await res.json() as any
+    const body = (await res.json()) as any
     expect(body.data.question).toBe('New Q?')
   })
 
   test('API-FAQS-003: Missing required field returns 400', async () => {
-    const res = await app.request('/faqs', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
+    const res = await app.request(
+      '/faqs',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ answer: 'forgot the question' }),
       },
-      body: JSON.stringify({ answer: 'forgot the question' }),
-    }, env)
+      env,
+    )
     expect(res.status).toBe(400)
   })
 
   test('API-FAQS-004: Admin updates FAQ', async () => {
-    const res = await app.request(`/faqs/${activeFaqId}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
+    const res = await app.request(
+      `/faqs/${activeFaqId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ question: 'Updated Q?' }),
       },
-      body: JSON.stringify({ question: 'Updated Q?' }),
-    }, env)
+      env,
+    )
     expect(res.status).toBe(200)
-    const body = await res.json() as any
+    const body = (await res.json()) as any
     expect(body.data.question).toBe('Updated Q?')
   })
 
   test('API-FAQS-005: Update non-existent FAQ returns 404', async () => {
-    const res = await app.request('/faqs/does-not-exist', {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
+    const res = await app.request(
+      '/faqs/does-not-exist',
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ question: 'X?' }),
       },
-      body: JSON.stringify({ question: 'X?' }),
-    }, env)
+      env,
+    )
     expect(res.status).toBe(404)
   })
 
   test('API-FAQS-006: Admin soft-deletes FAQ — disappears from list', async () => {
-    const res = await app.request(`/faqs/${activeFaqId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${adminToken}` },
-    }, env)
+    const res = await app.request(
+      `/faqs/${activeFaqId}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      },
+      env,
+    )
     expect(res.status).toBe(200)
-    const body = await res.json() as any
+    const body = (await res.json()) as any
     expect(body.data.deleted).toBe(true)
 
     // Should no longer appear in the active list (KV invalidated by delete handler)
     const listRes = await app.request('/faqs', { method: 'GET' }, env)
-    const listBody = await listRes.json() as any
+    const listBody = (await listRes.json()) as any
     expect(listBody.data).toHaveLength(0)
   })
 
   test('API-FAQS-007: Delete non-existent FAQ returns 404', async () => {
-    const res = await app.request('/faqs/does-not-exist', {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${adminToken}` },
-    }, env)
+    const res = await app.request(
+      '/faqs/does-not-exist',
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      },
+      env,
+    )
     expect(res.status).toBe(404)
   })
 })

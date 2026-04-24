@@ -1,22 +1,13 @@
-import type { FirebaseTokenClaims } from './types'
+import type { GoogleTokenClaims } from './types'
 import { unauthorized } from '../lib/errors'
 
 /**
- * Firebase exposes its signing public keys in two formats:
- *
- *  X.509 PEM (old approach — requires manual SPKI extraction from DER):
- *    https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com
- *
- *  JWK (this approach — importKey("jwk", ...) works directly):
- *    https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
- *
- * We use the JWK endpoint so crypto.subtle.importKey("jwk", ...) works without
- * any X.509 certificate or ASN.1 DER parsing — just a direct key import.
+ * JWK endpoint for Google OAuth 2.0 ID tokens.
+ * https://www.googleapis.com/oauth2/v3/certs
  */
-const GOOGLE_JWK_URL =
-  'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
+const GOOGLE_OAUTH_JWK_URL = 'https://www.googleapis.com/oauth2/v3/certs'
 
-export type GoogleCerts = Record<string, JsonWebKey>
+export type CertsMap = Record<string, JsonWebKey>
 
 // Helpers
 
@@ -38,27 +29,27 @@ function base64urlDecodeString(str: string): string {
 // Public API
 
 /**
- * Fetch Firebase's public signing keys in JWK format.
+ * Fetch Google OAuth public signing keys in JWK format.
  *
- * Returns a map of { kid → JsonWebKey } and the cache TTL from the
- * Cache-Control: max-age header (default 6 hours if header is missing).
+ * Used for verifying Google Identity Services (GIS) ID tokens.
+ * Returns a map of { kid → JsonWebKey } and the cache TTL.
  *
  * Store the result in KV and reuse until TTL expires to avoid hitting Google
  * on every request.
  */
-export async function fetchGoogleCerts(): Promise<{
-  certs: GoogleCerts
+export async function fetchGoogleOAuthCerts(): Promise<{
+  certs: CertsMap
   ttl: number
 }> {
-  const response = await fetch(GOOGLE_JWK_URL)
-  if (!response.ok) throw new Error('Failed to fetch Google public JWKs')
+  const response = await fetch(GOOGLE_OAUTH_JWK_URL)
+  if (!response.ok) throw new Error('Failed to fetch Google OAuth public JWKs')
 
   const body = (await response.json()) as {
     keys: (JsonWebKey & { kid: string })[]
   }
 
   // Build kid → JWK map
-  const certs: GoogleCerts = {}
+  const certs: CertsMap = {}
   for (const key of body.keys) {
     if (key.kid) certs[key.kid] = key
   }
@@ -72,20 +63,20 @@ export async function fetchGoogleCerts(): Promise<{
 }
 
 /**
- * Verify a Firebase RS256 ID token using the Web Crypto API.
+ * Verify a Google OAuth 2.0 ID token (from GIS).
  *
  * Uses JWK-format public keys fetched from Google's JWK endpoint — no
  * X.509 certificate parsing needed. Fully edge-compatible.
  *
- * @param token      - Raw Firebase JWT string from Authorization: Bearer <token>
- * @param projectId  - Firebase project ID (must match iss + aud claims)
+ * @param token      - Raw Google JWT string from GIS callback
+ * @param clientId   - OAuth client ID (must match aud claim)
  * @param getCerts   - Async function returning the cached kid → JsonWebKey map
  */
-export async function verifyFirebaseToken(
+export async function verifyGoogleToken(
   token: string,
-  projectId: string,
-  getCerts: () => Promise<GoogleCerts>,
-): Promise<FirebaseTokenClaims> {
+  clientId: string,
+  getCerts: () => Promise<CertsMap>,
+): Promise<GoogleTokenClaims> {
   const parts = token.split('.')
   if (parts.length !== 3) throw unauthorized('Malformed token')
 
@@ -137,7 +128,7 @@ export async function verifyFirebaseToken(
   if (!valid) throw unauthorized('Invalid token signature')
 
   // Decode and validate standard claims
-  let claims: FirebaseTokenClaims & { sub: string }
+  let claims: GoogleTokenClaims & { sub: string }
   try {
     claims = JSON.parse(base64urlDecodeString(payloadB64))
   } catch {
@@ -148,10 +139,15 @@ export async function verifyFirebaseToken(
 
   if (claims.exp < now) throw unauthorized('Token has expired')
   if (claims.iat > now + 300) throw unauthorized('Token issued in the future')
-  if (claims.iss !== `https://securetoken.google.com/${projectId}`) {
+
+  // Validate issuer and audience for Google OAuth tokens
+  if (claims.iss !== 'https://accounts.google.com') {
     throw unauthorized('Invalid token issuer')
   }
-  if (claims.aud !== projectId) throw unauthorized('Invalid token audience')
+  if (claims.aud !== clientId) {
+    throw unauthorized('Invalid token audience')
+  }
+
   if (!claims.sub) throw unauthorized('Missing token subject')
 
   return claims

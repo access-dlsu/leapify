@@ -1,9 +1,7 @@
 {
   "name": "your-leap-worker",
   "compatibility_date": "2026-04-02",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   // Mode 1: Standalone Worker
   // Point `main` at the pre-built worker bundle.
   // Build it first: npm run build  (or npx tsup)
@@ -13,29 +11,29 @@
   // Comment out the line above and point main at your own worker entry, e.g.:
   // "main": "src/worker.ts"   // ← your file that calls createLeapify()
 
-  // Cloudflare D1 (Relational Database) 
+  // Cloudflare D1 (Relational Database)
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "leapify",
-      "database_id": "your-d1-database-id" // from `wrangler d1 create leapify`
-    }
+      "database_id": "your-d1-database-id", // from `wrangler d1 create leapify`
+    },
   ],
 
-  // Cloudflare KV (Cache & Auth Tokens) 
+  // Cloudflare KV (Cache & Auth Tokens)
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "your-kv-namespace-id" // from `wrangler kv namespace create LEAPIFY_KV`
-    }
+      "id": "your-kv-namespace-id", // from `wrangler kv namespace create LEAPIFY_KV`
+    },
   ],
 
-  // Cloudflare R2 (File Storage — optional) 
+  // Cloudflare R2 (File Storage — optional)
   "r2_buckets": [
     {
       "binding": "FILES",
-      "bucket_name": "leapify-files"
-    }
+      "bucket_name": "leapify-files",
+    },
   ],
 
   // Cloudflare Queues (Async Jobs — email, audit, snapshots, watch renewals)
@@ -43,8 +41,8 @@
     "producers": [
       {
         "binding": "EMAIL_QUEUE",
-        "queue_name": "leapify-email-queue"
-      }
+        "queue_name": "leapify-email-queue",
+      },
     ],
     "consumers": [
       {
@@ -52,22 +50,22 @@
         "max_batch_size": 10,
         "max_batch_timeout": 30,
         "max_retries": 3,
-        "dead_letter_queue": "leapify-email-dlq"
-      }
-    ]
+        "dead_letter_queue": "leapify-email-dlq",
+      },
+    ],
   },
 
-  // Cron Triggers 
+  // Cron Triggers
   "triggers": {
     "crons": [
       "* * * * *", // batch-release   — publish queued events (every 1 min)
       "*/5 * * * *", // reconcile-slots — D1 vs Google Forms drift fix (every 5 min)
       "0 * * * *", // reminder-emails + lifecycle-check (every hour)
-      "0 0 * * *" // renew-watches   — renew expiring Google Forms Watches (daily)
-    ]
-  }
+      "0 0 * * *", // renew-watches   — renew expiring Google Forms Watches (daily)
+    ],
+  },
 
-  // Secrets (set via `wrangler secret put <NAME>`) 
+  // Secrets (set via `wrangler secret put <NAME>`)
   // Do NOT put secret values here. Use `wrangler secret put` for each:
   //
   // CORS (standalone mode only)
@@ -76,8 +74,8 @@
   //  # omit (or set to "") to block all cross-origin requests
   //
   // Core
-  //  wrangler secret put FIREBASE_PROJECT_ID
-  //  wrangler secret put FIREBASE_WEB_API_KEY
+  //  wrangler secret put GOOGLE_CLIENT_ID
+  //  # value: your OAuth 2.0 Client ID, e.g. "xxx.apps.googleusercontent.com"
   //  wrangler secret put GFORMS_SERVICE_ACCOUNT_JSON
   //  wrangler secret put GFORMS_WEBHOOK_SECRET
   //  wrangler secret put CONTENTFUL_SPACE_ID
