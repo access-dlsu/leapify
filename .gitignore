@@ -147,8 +147,9 @@ vite.config.ts.timestamp-*
 # Package Lock (Shouldn't Be on Repository)
 package-lock.json
 
-# Claude
-.claude/settings.local.json
+# Claude / Qwen
+.claude/settings*
+.qwen/settings*
 
 # Wrangler
 .wrangler/
