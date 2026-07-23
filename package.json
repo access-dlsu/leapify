@@ -131,7 +131,7 @@
     "zod": "^4.4.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260606.1",
+    "@cloudflare/workers-types": "^5.20260722.1",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^12.10.0",
     "drizzle-kit": "^0.31.10",
